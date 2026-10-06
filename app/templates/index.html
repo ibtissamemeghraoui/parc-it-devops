@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>Parc IT</title>
+  <style>
+    body { font-family: sans-serif; margin: 2rem; }
+    table { border-collapse: collapse; width: 100%; margin-bottom: 1.5rem; }
+    th, td { border: 1px solid #ccc; padding: 6px 10px; text-align: left; }
+    th { background: #f0f0f0; }
+    input, select { padding: 4px; margin-right: 6px; }
+  </style>
+</head>
+<body>
+  <h1>Gestion du parc informatique</h1>
+
+  <table>
+    <tr><th>ID</th><th>Nom</th><th>Type</th><th>N° de série</th><th>Statut</th><th>Affectation</th><th></th></tr>
+    {% for e in equipements %}
+    <tr>
+      <td>{{ e.id }}</td><td>{{ e.nom }}</td><td>{{ e.type }}</td>
+      <td>{{ e.numero_serie }}</td><td>{{ e.statut }}</td><td>{{ e.affectation or "" }}</td>
+      <td>
+        <form method="post" action="/supprimer/{{ e.id }}">
+          <button type="submit">Supprimer</button>
+        </form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="7">Aucun équipement.</td></tr>
+    {% endfor %}
+  </table>
+
+  <h2>Ajouter un équipement</h2>
+  <form method="post" action="/ajouter">
+    <input name="nom" placeholder="Nom" required>
+    <input name="type" placeholder="Type (PC, switch...)" required>
+    <input name="numero_serie" placeholder="N° de série" required>
+    <select name="statut">
+      <option>en stock</option><option>affecté</option><option>en panne</option>
+    </select>
+    <input name="affectation" placeholder="Affecté à">
+    <button type="submit">Ajouter</button>
+  </form>
+</body>
+</html>
