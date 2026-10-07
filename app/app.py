@@ -14,7 +14,8 @@ class Equipement(db.Model):
     numero_serie = db.Column(db.String(100), unique=True, nullable=False)
     statut = db.Column(db.String(30), nullable=False, default="en stock")
     affectation = db.Column(db.String(100))
-def to_dict(self):
+
+    def to_dict(self):
         return {
             "id": self.id,
             "nom": self.nom,
@@ -23,7 +24,6 @@ def to_dict(self):
             "statut": self.statut,
             "affectation": self.affectation,
         }
-
 def create_app(config=None):
     app = Flask(__name__)
     # La connexion à la base vient d'une variable d'environnement, jamais du code.
