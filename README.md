@@ -1,4 +1,5 @@
 # Parc IT DevOps
+![CI](https://github.com/ibtissamemeghraoui/parc-it-devops/actions/workflows/ci.yml/badge.svg?branch=dev)
 
 Application web de gestion de parc informatique (équipements, statuts, affectations),
 industrialisée avec une chaîne DevOps complète : conteneurs, CI/CD, infrastructure
