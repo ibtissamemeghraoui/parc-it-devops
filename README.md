@@ -17,13 +17,24 @@ as code et supervision.
 ```bash
 python -m venv .venv
 source .venv/Scripts/activate      # Git Bash sous Windows
-pip install -r app/requirements.txt
+pip install -r app/requirements-dev.txt
 cd app
 python app.py
 ```
 
 L'application est disponible sur http://localhost:5000
+## Lancer avec Docker Compose
 
+```bash
+cp .env.example .env     # puis choisir un mot de passe dans .env
+docker compose up -d --build
+```
+
+Trois services démarrent : Nginx (point d'entrée), l'application et PostgreSQL
+(les données sont conservées dans un volume). L'application est disponible sur
+http://localhost:8080
+
+Pour arrêter : `docker compose down` (ajouter `-v` pour supprimer aussi les données).
 ## Lancer les tests
 
 ```bash
@@ -44,8 +55,8 @@ pytest -v
 ## Feuille de route
 
 - [x] Application Flask, API JSON et tests
-- [ ] Conteneurisation (Docker, Docker Compose)
-- [ ] CI/CD (GitHub Actions)
+- [x] Conteneurisation (Docker, Docker Compose)
+- [x] Intégration continue (GitHub Actions)
 - [ ] Infrastructure as Code (Terraform)
 - [ ] Supervision (Prometheus, Grafana)
 - [ ] Sécurité (Trivy)
