@@ -1,0 +1,13 @@
+warning: in the working copy of 'docker-compose.yml', LF will be replaced by CRLF the next time Git touches it
+[1mdiff --git a/docker-compose.yml b/docker-compose.yml[m
+[1mindex e7e33c8..4fda521 100644[m
+[1m--- a/docker-compose.yml[m
+[1m+++ b/docker-compose.yml[m
+[36m@@ -58,6 +58,7 @@[m [mservices:[m
+     volumes:[m
+       - grafanadata:/var/lib/grafana[m
+       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro[m
+[32m+[m[32m      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro[m
+     ports:[m
+       - "127.0.0.1:3000:3000"[m
+     depends_on:[m
