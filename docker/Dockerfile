@@ -11,6 +11,7 @@ WORKDIR /srv
 COPY app/requirements.txt .
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --only-binary=:all: --default-timeout=60 --retries 15 -r requirements.txt
+RUN python -m pip uninstall -y pip
 
 COPY app/ .
 
