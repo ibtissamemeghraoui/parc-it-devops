@@ -28,7 +28,7 @@ services:
       - backend
 
   nginx:
-    image: nginx:1.27-alpine
+    image: nginx:1.31-alpine
     ports:
       - "8080:80"
     volumes:
