@@ -2,6 +2,7 @@ import os
 
 from flask import Flask, jsonify, redirect, render_template, request, url_for
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import text
 from prometheus_flask_exporter import PrometheusMetrics
 
 db = SQLAlchemy()
@@ -24,6 +25,9 @@ class Equipement(db.Model):
             "statut": self.statut,
             "affectation": self.affectation,
         }
+def verifier_base():
+    """Interroge la base : lève une exception si elle ne répond pas."""
+    db.session.execute(text("SELECT 1"))
 def create_app(config=None):
     app = Flask(__name__)
     # La connexion à la base vient d'une variable d'environnement, jamais du code.
@@ -42,6 +46,14 @@ def create_app(config=None):
     @app.get("/health")
     def health():
         return "OK", 200
+    
+    @app.get("/ready")
+    def ready():
+        try:
+            verifier_base()
+        except Exception:
+            return jsonify(status="base indisponible"), 503
+        return jsonify(status="ok"), 200
 
     @app.get("/")
     def index():
