@@ -40,3 +40,20 @@ def test_supprimer(client):
     eq_id = client.post("/api/equipements", json=NOUVEAU).get_json()["id"]
     assert client.delete(f"/api/equipements/{eq_id}").status_code == 204
     assert client.get(f"/api/equipements/{eq_id}").status_code == 404
+def test_ready_ok(client):
+    r = client.get("/ready")
+    assert r.status_code == 200
+    assert r.get_json()["status"] == "ok"
+
+
+def test_ready_base_indisponible(client, monkeypatch):
+    import app as module_app
+
+    def boom():
+        raise RuntimeError("base arretee")
+
+    monkeypatch.setattr(module_app, "verifier_base", boom)
+    r = client.get("/ready")
+    assert r.status_code == 503
+    assert r.get_json()["status"] == "base indisponible"
+
