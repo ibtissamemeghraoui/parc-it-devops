@@ -51,6 +51,7 @@ pytest -v
 | `/metrics` | GET | Métriques Prometheus |
 | `/api/equipements` | GET, POST | Lister, créer |
 | `/api/equipements/<id>` | GET, PUT, DELETE | Lire, modifier, supprimer |
+| `/ready` | GET | Vérifie que l'application et la base de données répondent (503 sinon) |
 ## Architecture
 
 ```mermaid
@@ -79,6 +80,9 @@ réseau Docker, peut la lire.
 Prometheus collecte les métriques de l'application. Un tableau de bord Grafana, décrit
 dans des fichiers versionnés, affiche la disponibilité, le débit de requêtes, le temps
 de réponse moyen et les erreurs serveur.
+Trois règles d'alerte sont évaluées par Prometheus : application hors ligne, erreurs
+serveur (5xx) et temps de réponse élevé. Leur état est visible sur
+http://localhost:9090/alerts (l'envoi de notifications nécessiterait Alertmanager).
 ## Feuille de route
 
 - [x] Application Flask, API JSON et tests
