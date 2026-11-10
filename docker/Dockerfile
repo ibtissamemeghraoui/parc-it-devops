@@ -12,6 +12,7 @@ COPY app/requirements.txt .
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --only-binary=:all: --default-timeout=60 --retries 15 -r requirements.txt
 RUN python -m pip uninstall -y pip
+RUN apt-get update && apt-get install -y --only-upgrade zlib1g && rm -rf /var/lib/apt/lists/*
 
 COPY app/ .
 
