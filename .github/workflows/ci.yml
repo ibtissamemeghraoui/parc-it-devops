@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Récupérer le code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Installer Python
         uses: actions/setup-python@v5
@@ -36,7 +36,7 @@ jobs:
     needs: tests
     steps:
       - name: Récupérer le code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Construire l'image
         run: docker build -f docker/Dockerfile -t parc-it:ci .
