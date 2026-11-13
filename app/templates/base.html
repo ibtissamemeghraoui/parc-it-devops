@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block titre %}Parc IT{% endblock %} - Parc IT</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230ea5e9'/%3E%3Ctext x='16' y='22' font-size='18' text-anchor='middle' fill='white' font-family='Arial'%3EP%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<header class="entete">
+  <div class="entete-contenu">
+    <a class="marque" href="/">
+      <span class="logo">P</span>
+      <span><strong>Parc IT</strong><small>Gestion du parc informatique</small></span>
+    </a>
+    <nav class="entete-droite">
+      <a href="/api/equipements">API</a>
+      <a href="/export.csv">Export CSV</a>
+      <span class="pastille {{ 'ok' if base_ok else 'ko' }}">
+        <span class="pastille-point"></span>
+        {{ 'Système opérationnel' if base_ok else 'Base indisponible' }}
+      </span>
+    </nav>
+  </div>
+</header>
+
+<main>
+  {% block contenu %}{% endblock %}
+</main>
+
+<footer class="pied">
+  Flask · PostgreSQL · Docker · Nginx · Prometheus · Grafana
+</footer>
+</body>
+</html>
