@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block titre %}Modifier un équipement{% endblock %}
+
+{% block contenu %}
+  <section class="carte">
+    <h2>Modifier l'équipement n° {{ e.id }}</h2>
+    <form method="post" action="/modifier/{{ e.id }}" class="formulaire">
+      <label>Nom <input name="nom" value="{{ e.nom }}" required></label>
+      <label>Type <input name="type" value="{{ e.type }}" required></label>
+      <label>N° de série <input name="numero_serie" value="{{ e.numero_serie }}" required></label>
+      <label>Statut
+        <select name="statut">
+          {% for s in statuts %}
+          <option {% if s == e.statut %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Affecté à <input name="affectation" value="{{ e.affectation or '' }}"></label>
+      <div class="actions">
+        <button type="submit">Enregistrer</button>
+        <a class="bouton secondaire" href="/">Annuler</a>
+      </div>
+    </form>
+  </section>
+{% endblock %}
