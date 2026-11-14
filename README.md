@@ -51,12 +51,39 @@ pytest -v
 | `/metrics` | GET | Métriques Prometheus |
 | `/api/equipements` | GET, POST | Lister, créer |
 | `/api/equipements/<id>` | GET, PUT, DELETE | Lire, modifier, supprimer |
+## Architecture
 
+```mermaid
+flowchart LR
+    U[Utilisateur] -->|HTTP port 8080| N[Nginx]
+    N --> A[Application Flask avec gunicorn]
+    A --> D[(PostgreSQL avec volume)]
+    P[Prometheus] -->|lit les metriques toutes les 15 s| A
+    G[Grafana] -->|interroge| P
+```
+
+Seul Nginx est accessible depuis l'extérieur. La base de données n'est jamais exposée,
+et la page des métriques est fermée à l'extérieur : seul Prometheus, à l'intérieur du
+réseau Docker, peut la lire.
+
+## Sécurité
+
+- Le conteneur tourne avec un utilisateur sans privilèges.
+- Les versions des dépendances et des images sont figées.
+- pip est retiré de l'image finale pour réduire la surface d'attaque.
+- La CI scanne l'image avec Trivy et échoue si une faille grave corrigeable est détectée.
+- Les secrets sont dans un fichier `.env` exclu de Git (modèle fourni : `.env.example`).
+
+## Supervision
+
+Prometheus collecte les métriques de l'application. Un tableau de bord Grafana, décrit
+dans des fichiers versionnés, affiche la disponibilité, le débit de requêtes, le temps
+de réponse moyen et les erreurs serveur.
 ## Feuille de route
 
 - [x] Application Flask, API JSON et tests
 - [x] Conteneurisation (Docker, Docker Compose)
 - [x] Intégration continue (GitHub Actions)
 - [ ] Infrastructure as Code (Terraform)
-- [ ] Supervision (Prometheus, Grafana)
-- [ ] Sécurité (Trivy)
+- [x] Supervision (Prometheus, Grafana)
+- [x] Sécurité (Trivy)
