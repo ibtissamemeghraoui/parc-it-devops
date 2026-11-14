@@ -1,6 +1,17 @@
 import pytest
 
-from app import create_app, db
+from app import Utilisateur, create_app, db
+
+
+def creer_utilisateur(nom, mot_de_passe, role):
+    utilisateur = Utilisateur(nom_utilisateur=nom, role=role)
+    utilisateur.definir_mot_de_passe(mot_de_passe)
+    db.session.add(utilisateur)
+    db.session.commit()
+
+
+def se_connecter(client, nom, mot_de_passe):
+    return client.post("/login", data={"nom_utilisateur": nom, "mot_de_passe": mot_de_passe})
 
 
 @pytest.fixture
@@ -9,11 +20,28 @@ def client():
     app = create_app({"TESTING": True, "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:"})
     with app.app_context():
         db.create_all()
-        yield app.test_client()
+        creer_utilisateur("admin", "motdepasse-admin", "admin")
+        creer_utilisateur("lecteur", "motdepasse-lecteur", "lecteur")
+        admin = app.test_client()
+        se_connecter(admin, "admin", "motdepasse-admin")
+        yield admin
         db.drop_all()
 
 
+@pytest.fixture
+def anonyme(client):
+    return client.application.test_client()
+
+
+@pytest.fixture
+def lecteur(client):
+    autre = client.application.test_client()
+    se_connecter(autre, "lecteur", "motdepasse-lecteur")
+    return autre
+
+
 NOUVEAU = {"nom": "PC-01", "type": "PC", "numero_serie": "SN001"}
+FORMULAIRE = {"nom": "PC-01", "type": "PC", "numero_serie": "SN001", "statut": "en stock"}
 
 
 def test_health(client):
@@ -40,6 +68,8 @@ def test_supprimer(client):
     eq_id = client.post("/api/equipements", json=NOUVEAU).get_json()["id"]
     assert client.delete(f"/api/equipements/{eq_id}").status_code == 204
     assert client.get(f"/api/equipements/{eq_id}").status_code == 404
+
+
 def test_ready_ok(client):
     r = client.get("/ready")
     assert r.status_code == 200
@@ -56,9 +86,6 @@ def test_ready_base_indisponible(client, monkeypatch):
     r = client.get("/ready")
     assert r.status_code == 503
     assert r.get_json()["status"] == "base indisponible"
-
-
-FORMULAIRE = {"nom": "PC-01", "type": "PC", "numero_serie": "SN001", "statut": "en stock"}
 
 
 def test_api_doublon_renvoie_409(client):
@@ -96,11 +123,18 @@ def test_recherche_filtre_les_equipements(client):
 
 
 def test_filtre_par_statut(client):
-    client.post("/api/equipements", json={"nom": "A", "type": "PC", "numero_serie": "A1", "statut": "en panne"})
-    client.post("/api/equipements", json={"nom": "B", "type": "PC", "numero_serie": "B2", "statut": "en stock"})
+    client.post(
+        "/api/equipements",
+        json={"nom": "A", "type": "PC", "numero_serie": "A1", "statut": "en panne"},
+    )
+    client.post(
+        "/api/equipements",
+        json={"nom": "B", "type": "PC", "numero_serie": "B2", "statut": "en stock"},
+    )
     texte = client.get("/?statut=en panne").get_data(as_text=True)
     assert ">A<" in texte
     assert ">B<" not in texte
+
 
 def test_export_csv_neutralise_les_formules(client):
     client.post("/api/equipements", json={"nom": "=CMD", "type": "PC", "numero_serie": "C1"})
@@ -123,3 +157,55 @@ def test_page_affiche_graphiques_et_etat_du_systeme(client):
     assert "Répartition par statut" in texte
     assert "Équipements par type" in texte
     assert "Système opérationnel" in texte
+
+
+# ---------- Authentification et rôles ----------
+
+
+def test_page_sans_connexion_redirige_vers_login(anonyme):
+    r = anonyme.get("/")
+    assert r.status_code == 302
+    assert "/login" in r.headers["Location"]
+
+
+def test_api_sans_connexion_renvoie_401(anonyme):
+    assert anonyme.get("/api/equipements").status_code == 401
+
+
+def test_health_et_ready_restent_publics(anonyme):
+    assert anonyme.get("/health").status_code == 200
+    assert anonyme.get("/ready").status_code == 200
+
+
+def test_mauvais_mot_de_passe_refuse(anonyme):
+    r = se_connecter(anonyme, "admin", "faux")
+    assert r.status_code == 401
+    assert anonyme.get("/api/equipements").status_code == 401
+
+
+def test_lecteur_peut_lire(lecteur):
+    assert lecteur.get("/api/equipements").status_code == 200
+
+
+def test_lecteur_ne_peut_pas_creer_via_api(lecteur):
+    assert lecteur.post("/api/equipements", json=NOUVEAU).status_code == 403
+
+
+def test_lecteur_ne_peut_pas_supprimer(client, lecteur):
+    eq_id = client.post("/api/equipements", json=NOUVEAU).get_json()["id"]
+    assert lecteur.delete(f"/api/equipements/{eq_id}").status_code == 403
+    assert client.get(f"/api/equipements/{eq_id}").status_code == 200
+
+
+def test_lecteur_ne_peut_pas_ajouter_via_la_page(lecteur):
+    assert lecteur.post("/ajouter", data=FORMULAIRE).status_code == 403
+
+
+def test_deconnexion(client):
+    client.post("/logout")
+    assert client.get("/api/equipements").status_code == 401
+
+
+def test_mot_de_passe_est_hache(client):
+    utilisateur = Utilisateur.query.filter_by(nom_utilisateur="admin").first()
+    assert utilisateur.mot_de_passe_hash != "motdepasse-admin"

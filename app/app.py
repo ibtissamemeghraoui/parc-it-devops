@@ -1,16 +1,31 @@
 import csv
 import io
 import os
+from datetime import timedelta
+from functools import wraps
 
-from flask import Flask, Response, jsonify, redirect, render_template, request, url_for
+import click
+from flask import (
+    Flask,
+    Response,
+    abort,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
+)
 from flask_sqlalchemy import SQLAlchemy
 from prometheus_flask_exporter import PrometheusMetrics
 from sqlalchemy import func, or_, text
 from sqlalchemy.exc import IntegrityError
+from werkzeug.security import check_password_hash, generate_password_hash
 
 db = SQLAlchemy()
 
 STATUTS = ("en stock", "affecté", "en panne")
+ROLES = ("admin", "lecteur")
 CHAMPS_OBLIGATOIRES = ("nom", "type", "numero_serie")
 CLASSES = {"en stock": "stock", "affecté": "affecte", "en panne": "panne"}
 COULEURS = {"en stock": "#22c55e", "affecté": "#38bdf8", "en panne": "#ef4444"}
@@ -43,6 +58,19 @@ class Equipement(db.Model):
             "statut": self.statut,
             "affectation": self.affectation,
         }
+
+
+class Utilisateur(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    nom_utilisateur = db.Column(db.String(50), unique=True, nullable=False)
+    mot_de_passe_hash = db.Column(db.String(255), nullable=False)
+    role = db.Column(db.String(20), nullable=False, default="lecteur")
+
+    def definir_mot_de_passe(self, mot_de_passe):
+        self.mot_de_passe_hash = generate_password_hash(mot_de_passe)
+
+    def verifier_mot_de_passe(self, mot_de_passe):
+        return check_password_hash(self.mot_de_passe_hash, mot_de_passe)
 
 
 def verifier_base():
@@ -91,13 +119,48 @@ def style_donut(compteurs):
     return "conic-gradient(" + ", ".join(morceaux) + ")"
 
 
+def utilisateur_courant():
+    """Renvoie l'utilisateur de la session, ou None s'il n'est pas connecté."""
+    user_id = session.get("user_id")
+    return db.session.get(Utilisateur, user_id) if user_id else None
+
+
+def exiger(role=None):
+    """Protège une route : connexion obligatoire, et un rôle précis si demandé."""
+
+    def decorateur(vue):
+        @wraps(vue)
+        def enveloppe(*args, **kwargs):
+            utilisateur = utilisateur_courant()
+            est_api = request.path.startswith("/api/")
+            if utilisateur is None:
+                if est_api:
+                    return jsonify(erreur="authentification requise"), 401
+                return redirect(url_for("login"))
+            if role and utilisateur.role != role:
+                if est_api:
+                    return jsonify(erreur="droits insuffisants"), 403
+                abort(403)
+            return vue(*args, **kwargs)
+
+        return enveloppe
+
+    return decorateur
+
+
 def create_app(config=None):
     app = Flask(__name__)
-    # La connexion à la base vient d'une variable d'environnement, jamais du code.
+    # La connexion à la base et la clé secrète viennent de variables
+    # d'environnement, jamais du code.
     app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URL", "sqlite:///parc.db")
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+    app.config["SECRET_KEY"] = os.getenv("SECRET_KEY")
+    app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+    app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=8)
     if config:
         app.config.update(config)
+    if not app.config["SECRET_KEY"]:
+        raise RuntimeError("SECRET_KEY manquante : définis-la dans le fichier .env")
 
     db.init_app(app)
 
@@ -109,8 +172,9 @@ def create_app(config=None):
         db.create_all()
 
     @app.context_processor
-    def etat_systeme():
-        return {"base_ok": base_est_ok()}
+    def contexte():
+        ok = base_est_ok()
+        return {"base_ok": ok, "utilisateur": utilisateur_courant() if ok else None}
 
     @app.get("/health")
     def health():
@@ -124,8 +188,29 @@ def create_app(config=None):
             return jsonify(status="base indisponible"), 503
         return jsonify(status="ok"), 200
 
+    # ---------- Connexion ----------
+    @app.route("/login", methods=["GET", "POST"])
+    def login():
+        if request.method == "POST":
+            nom = request.form.get("nom_utilisateur", "").strip()
+            mot_de_passe = request.form.get("mot_de_passe", "")
+            utilisateur = Utilisateur.query.filter_by(nom_utilisateur=nom).first()
+            if utilisateur is None or not utilisateur.verifier_mot_de_passe(mot_de_passe):
+                return render_template("login.html", erreur="Identifiants invalides."), 401
+            session.clear()
+            session["user_id"] = utilisateur.id
+            session.permanent = True
+            return redirect(url_for("index"))
+        return render_template("login.html", erreur=None)
+
+    @app.post("/logout")
+    def logout():
+        session.clear()
+        return redirect(url_for("login"))
+
     # ---------- Pages web ----------
     @app.get("/")
+    @exiger()
     def index():
         recherche = request.args.get("q", "").strip()
         statut = request.args.get("statut", "")
@@ -172,14 +257,21 @@ def create_app(config=None):
         )
 
     @app.get("/export.csv")
+    @exiger()
     def export_csv():
         sortie = io.StringIO()
         ecrivain = csv.writer(sortie)
         ecrivain.writerow(["id", "nom", "type", "numero_serie", "statut", "affectation"])
         for e in Equipement.query.order_by(Equipement.id).all():
             ecrivain.writerow(
-                [e.id, neutraliser(e.nom), neutraliser(e.type), neutraliser(e.numero_serie),
-                 neutraliser(e.statut), neutraliser(e.affectation)]
+                [
+                    e.id,
+                    neutraliser(e.nom),
+                    neutraliser(e.type),
+                    neutraliser(e.numero_serie),
+                    neutraliser(e.statut),
+                    neutraliser(e.affectation),
+                ]
             )
         return Response(
             sortie.getvalue(),
@@ -188,6 +280,7 @@ def create_app(config=None):
         )
 
     @app.post("/ajouter")
+    @exiger("admin")
     def ajouter():
         champs = lire_formulaire(request.form)
         if not all(champs[c] for c in CHAMPS_OBLIGATOIRES):
@@ -201,11 +294,13 @@ def create_app(config=None):
         return redirect(url_for("index", msg="ajoute"))
 
     @app.get("/modifier/<int:eq_id>")
+    @exiger("admin")
     def modifier_formulaire(eq_id):
         eq = db.get_or_404(Equipement, eq_id)
         return render_template("modifier.html", e=eq, statuts=STATUTS)
 
     @app.post("/modifier/<int:eq_id>")
+    @exiger("admin")
     def modifier(eq_id):
         eq = db.get_or_404(Equipement, eq_id)
         champs = lire_formulaire(request.form)
@@ -221,6 +316,7 @@ def create_app(config=None):
         return redirect(url_for("index", msg="modifie"))
 
     @app.post("/supprimer/<int:eq_id>")
+    @exiger("admin")
     def supprimer(eq_id):
         eq = db.get_or_404(Equipement, eq_id)
         db.session.delete(eq)
@@ -229,10 +325,12 @@ def create_app(config=None):
 
     # ---------- API JSON (CRUD complet) ----------
     @app.get("/api/equipements")
+    @exiger()
     def api_lister():
         return jsonify([e.to_dict() for e in Equipement.query.all()])
 
     @app.post("/api/equipements")
+    @exiger("admin")
     def api_creer():
         data = request.get_json(silent=True) or {}
         manquants = [c for c in CHAMPS_OBLIGATOIRES if not data.get(c)]
@@ -257,10 +355,12 @@ def create_app(config=None):
         return jsonify(eq.to_dict()), 201
 
     @app.get("/api/equipements/<int:eq_id>")
+    @exiger()
     def api_lire(eq_id):
         return jsonify(db.get_or_404(Equipement, eq_id).to_dict())
 
     @app.put("/api/equipements/<int:eq_id>")
+    @exiger("admin")
     def api_modifier(eq_id):
         eq = db.get_or_404(Equipement, eq_id)
         data = request.get_json(silent=True) or {}
@@ -277,11 +377,29 @@ def create_app(config=None):
         return jsonify(eq.to_dict())
 
     @app.delete("/api/equipements/<int:eq_id>")
+    @exiger("admin")
     def api_supprimer(eq_id):
         eq = db.get_or_404(Equipement, eq_id)
         db.session.delete(eq)
         db.session.commit()
         return "", 204
+
+    # ---------- Commande pour créer les comptes ----------
+    @app.cli.command("creer-utilisateur")
+    @click.argument("nom_utilisateur")
+    @click.option("--role", type=click.Choice(ROLES), default="lecteur", show_default=True)
+    @click.password_option()
+    def creer_utilisateur(nom_utilisateur, role, password):
+        """Crée un utilisateur (le mot de passe est demandé sans écho)."""
+        if len(password) < 8:
+            raise click.ClickException("Le mot de passe doit faire au moins 8 caractères.")
+        if Utilisateur.query.filter_by(nom_utilisateur=nom_utilisateur).first():
+            raise click.ClickException("Cet utilisateur existe déjà.")
+        utilisateur = Utilisateur(nom_utilisateur=nom_utilisateur, role=role)
+        utilisateur.definir_mot_de_passe(password)
+        db.session.add(utilisateur)
+        db.session.commit()
+        click.echo(f"Utilisateur {nom_utilisateur} créé avec le rôle {role}.")
 
     return app
 

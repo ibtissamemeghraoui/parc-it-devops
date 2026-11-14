@@ -1,105 +1,104 @@
 {% extends "base.html" %}
-{% block titre %}Tableau de bord{% endblock %}
-
+{% block titre %}Inventaire – Parc IT{% endblock %}
 {% block contenu %}
-  {% if message %}
-  <p class="message {{ message[0] }}">{{ message[1] }}</p>
-  {% endif %}
+{% set admin = utilisateur and utilisateur.role == 'admin' %}
+{% if message %}<p class="avis {{ message[0] }}" role="status">{{ message[1] }}</p>{% endif %}
 
-  <section class="kpis">
-    <div class="kpi">
-      <span class="kpi-valeur">{{ total }}</span>
-      <span class="kpi-label">Équipements</span>
-    </div>
-    {% for s in statuts %}
-    <div class="kpi {{ classes[s] }}">
-      <span class="kpi-valeur">{{ compteurs[s] }}</span>
-      <span class="kpi-label">{{ s|capitalize }}</span>
-    </div>
-    {% endfor %}
-  </section>
-
-  <section class="graphiques">
-    <div class="carte">
+<div class="grille">
+  <aside class="cote">
+    <section class="carte">
       <h2>Répartition par statut</h2>
-      <div class="donut-zone">
-        <div class="donut" style="background: {{ donut }}">
-          <div class="donut-trou"><strong>{{ total }}</strong><small>au total</small></div>
-        </div>
-        <ul class="legende">
-          {% for s in statuts %}
-          <li><span class="point {{ classes[s] }}"></span>{{ s }} <b>{{ compteurs[s] }}</b></li>
-          {% endfor %}
-        </ul>
-      </div>
-    </div>
-
-    <div class="carte">
-      <h2>Équipements par type</h2>
-      {% for t, n, pct in par_type %}
-      <div class="barre-ligne">
-        <span>{{ t }}</span>
-        <div class="barre"><div style="width: {{ pct }}%"></div></div>
-        <b>{{ n }}</b>
-      </div>
-      {% else %}
-      <p class="vide">Aucune donnée pour l'instant.</p>
-      {% endfor %}
-    </div>
-  </section>
-
-  <section class="carte">
-    <h2>Équipements</h2>
-    <form method="get" action="/" class="recherche">
-      <input name="q" placeholder="Rechercher (nom, type, n° de série, personne)" value="{{ recherche }}">
-      <select name="statut">
-        <option value="">Tous les statuts</option>
+      <div class="donut" style="background:{{ donut }}"><span>{{ total }}</span></div>      <ul class="legende">
         {% for s in statuts %}
-        <option value="{{ s }}" {% if s == statut %}selected{% endif %}>{{ s }}</option>
+        <li><i class="pt {{ classes.get(s, '') }}"></i>{{ s }}<b>{{ compteurs[s] }}</b></li>
         {% endfor %}
-      </select>
-      <button type="submit">Filtrer</button>
-      <a class="bouton secondaire" href="/">Réinitialiser</a>
-    </form>
+      </ul>
+    </section>
+    <section class="carte">
+      <h2>Équipements par type</h2>
+      {% if par_type %}
+      <ul class="types">
+        {% for t, n, p in par_type %}
+        <li><span>{{ t }}</span><b>{{ n }}</b><span class="barre"><i style="width:{{ p }}%"></i></span></li>        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="doux">Aucun équipement pour l'instant.</p>
+      {% endif %}
+    </section>
+  </aside>
 
-    <div class="table-scroll">
+  <section>
+    {% if admin %}
+    <details class="carte ajout" {% if message and message[0] == 'erreur' %}open{% endif %}>
+      <summary>Ajouter un équipement</summary>
+      <form method="post" action="{{ url_for('ajouter') }}">
+        <div class="champs">
+          <label>Nom<input name="nom" required maxlength="100"></label>
+          <label>Type<input name="type" required maxlength="50"></label>
+          <label>Numéro de série<input name="numero_serie" required maxlength="100"></label>
+          <label>Statut
+            <select name="statut">{% for s in statuts %}<option>{{ s }}</option>{% endfor %}</select>
+          </label>
+          <label>Affectation<input name="affectation" maxlength="100"></label>
+        </div>
+        <div class="boutons"><button class="btn" type="submit">Ajouter l'équipement</button></div>
+      </form>
+    </details>
+    {% endif %}
+
+    <div class="outils">
+      <form class="recherche" method="get" action="{{ url_for('index') }}">
+        {% if statut %}<input type="hidden" name="statut" value="{{ statut }}">{% endif %}
+        <input type="search" name="q" value="{{ recherche }}" placeholder="Rechercher un nom, un type, une affectation…" aria-label="Rechercher">
+        <button class="btn" type="submit">Rechercher</button>
+      </form>
+      <a class="btn neutre" href="{{ url_for('export_csv') }}">Exporter en CSV</a>
+    </div>
+
+    <nav class="filtres" aria-label="Filtrer par statut">
+      <a href="{{ url_for('index', q=recherche or None) }}" {% if not statut %}aria-current="true"{% endif %}>Tous</a>
+      {% for s in statuts %}
+      <a href="{{ url_for('index', statut=s, q=recherche or None) }}" {% if statut == s %}aria-current="true"{% endif %}>{{ s }}</a>
+      {% endfor %}
+    </nav>
+
+    {% if equipements %}
+    <div class="tableau">
       <table>
-        <tr><th>ID</th><th>Nom</th><th>Type</th><th>N° de série</th><th>Statut</th><th>Affectation</th><th></th></tr>
-        {% for e in equipements %}
-        <tr>
-          <td>{{ e.id }}</td>
-          <td>{{ e.nom }}</td>
-          <td>{{ e.type }}</td>
-          <td>{{ e.numero_serie }}</td>
-          <td><span class="badge {{ classes.get(e.statut, 'autre') }}">{{ e.statut }}</span></td>
-          <td>{{ e.affectation or "" }}</td>
-          <td class="actions">
-            <a class="bouton secondaire" href="/modifier/{{ e.id }}">Modifier</a>
-            <form method="post" action="/supprimer/{{ e.id }}" onsubmit="return confirm('Supprimer cet équipement ?')">
-              <button type="submit" class="danger">Supprimer</button>
-            </form>
-          </td>
-        </tr>
-        {% else %}
-        <tr><td colspan="7" class="vide">Aucun équipement ne correspond.</td></tr>
-        {% endfor %}
+        <thead>
+          <tr>
+            <th>Nom</th><th>Type</th><th>Numéro de série</th><th>Statut</th><th>Affectation</th>
+            {% if admin %}<th>Actions</th>{% endif %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for e in equipements %}
+          <tr class="{{ classes.get(e.statut, '') }}">
+            <td><strong>{{ e.nom }}</strong></td>
+            <td>{{ e.type }}</td>
+            <td><span class="serie">{{ e.numero_serie }}</span></td>
+            <td><span class="pilule {{ classes.get(e.statut, '') }}">{{ e.statut }}</span></td>
+            <td>{% if e.affectation %}{{ e.affectation }}{% else %}<span class="doux">Non affecté</span>{% endif %}</td>
+            {% if admin %}
+            <td class="actions">
+              <a class="btn neutre petit" href="{{ url_for('modifier_formulaire', eq_id=e.id) }}">Modifier</a>
+              <form method="post" action="{{ url_for('supprimer', eq_id=e.id) }}" onsubmit="return confirm('Supprimer cet équipement ?')">
+                <button class="btn danger petit" type="submit">Supprimer</button>
+              </form>
+            </td>
+            {% endif %}
+          </tr>
+          {% endfor %}
+        </tbody>
       </table>
     </div>
+    {% else %}
+    <div class="carte vide">
+      {% if recherche or statut %}Aucun équipement ne correspond à cette recherche.
+      {% elif admin %}Aucun équipement pour l'instant. Ajoute le premier avec le formulaire ci-dessus.
+      {% else %}Aucun équipement pour l'instant.{% endif %}
+    </div>
+    {% endif %}
   </section>
-
-  <section class="carte">
-    <h2>Ajouter un équipement</h2>
-    <form method="post" action="/ajouter" class="formulaire">
-      <label>Nom <input name="nom" required></label>
-      <label>Type <input name="type" placeholder="PC, switch..." required></label>
-      <label>N° de série <input name="numero_serie" required></label>
-      <label>Statut
-        <select name="statut">
-          {% for s in statuts %}<option>{{ s }}</option>{% endfor %}
-        </select>
-      </label>
-      <label>Affecté à <input name="affectation"></label>
-      <button type="submit">Ajouter</button>
-    </form>
-  </section>
+</div>
 {% endblock %}
