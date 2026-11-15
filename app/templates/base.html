@@ -3,34 +3,91 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block titre %}Parc IT{% endblock %} - Parc IT</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230ea5e9'/%3E%3Ctext x='16' y='22' font-size='18' text-anchor='middle' fill='white' font-family='Arial'%3EP%3C/text%3E%3C/svg%3E">
-  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <title>{% block titre %}Parc IT{% endblock %}</title>
+  <style>
+    :root{--ink:#17233b;--bg:#eef1f5;--carte:#fff;--trait:#d9e0e8;--doux:#5b6778;--accent:#0b6e6e;--accent-fonce:#095858;--stock:#22c55e;--affecte:#38bdf8;--panne:#ef4444}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 "Segoe UI Variable","Segoe UI",system-ui,sans-serif}
+    :focus-visible{outline:3px solid #f59e0b;outline-offset:2px}
+    .bandeau{display:flex;align-items:center;gap:1rem;flex-wrap:wrap;padding:.75rem clamp(1rem,4vw,2.5rem);background:var(--ink);color:#fff}
+    .marque{margin-right:auto;font-size:1.25rem;font-weight:650;color:#fff;text-decoration:none}
+    .etat{display:flex;align-items:center;gap:.5rem;font-size:.875rem}
+    .etat::before{content:"";width:.6rem;height:.6rem;border-radius:50%;background:var(--stock)}
+    .etat.ko::before{background:var(--panne)}
+    .compte{display:flex;align-items:center;gap:.6rem;font-size:.9rem}
+    .compte form{margin:0}
+    .role{padding:.1rem .6rem;border-radius:99px;background:rgba(255,255,255,.16);font-size:.8rem}
+    .lien{padding:.3rem .7rem;border:1px solid rgba(255,255,255,.4);border-radius:6px;background:none;color:#fff;font:inherit;font-size:.875rem;cursor:pointer}
+    .lien:hover{background:rgba(255,255,255,.12)}
+    .page{max-width:1200px;margin:0 auto;padding:1.5rem clamp(1rem,4vw,2.5rem) 3rem}
+    h1,h2{margin:0;line-height:1.2}
+    h2{margin-bottom:.9rem;font-size:1rem;font-weight:650}
+    .carte{padding:1.1rem 1.25rem;border:1px solid var(--trait);border-radius:8px;background:var(--carte)}
+    .grille{display:grid;gap:1.25rem;grid-template-columns:1fr}
+    @media(min-width:960px){.grille{grid-template-columns:290px 1fr;align-items:start}}
+    .cote{display:grid;gap:1.25rem}
+    .donut{display:grid;place-items:center;width:150px;height:150px;margin:0 auto 1.1rem;border-radius:50%}
+    .donut span{display:grid;place-items:center;width:98px;height:98px;border-radius:50%;background:var(--carte);font-size:1.75rem;font-weight:650}
+    .legende,.types{margin:0;padding:0;list-style:none;display:grid;gap:.6rem}
+    .legende li{display:flex;align-items:center;gap:.6rem}
+    .legende b{margin-left:auto}
+    .pt{width:.7rem;height:.7rem;border-radius:50%}
+    .pt.stock{background:var(--stock)}.pt.affecte{background:var(--affecte)}.pt.panne{background:var(--panne)}
+    .types li{display:grid;grid-template-columns:1fr auto;gap:.25rem .6rem;font-size:.9rem}
+    .barre{grid-column:1/-1;height:6px;border-radius:3px;background:#e4e9ef;overflow:hidden}
+    .barre i{display:block;height:100%;background:var(--accent)}
+    .outils{display:flex;flex-wrap:wrap;align-items:center;gap:.75rem;margin-bottom:1rem}
+    .recherche{display:flex;flex:1 1 260px;gap:.5rem}
+    .filtres{display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:1rem}
+    .filtres a{padding:.25rem .8rem;border:1px solid var(--trait);border-radius:99px;background:#fff;color:var(--ink);font-size:.875rem;text-decoration:none}
+    .filtres a[aria-current]{border-color:var(--ink);background:var(--ink);color:#fff}
+    input,select{width:100%;padding:.5rem .65rem;border:1px solid #b9c3cf;border-radius:6px;background:#fff;color:var(--ink);font:inherit}
+    label{display:grid;gap:.3rem;font-size:.9rem;font-weight:600}
+    .btn{display:inline-block;padding:.5rem .95rem;border:1px solid var(--accent);border-radius:6px;background:var(--accent);color:#fff;font:inherit;font-size:.9rem;text-decoration:none;cursor:pointer}
+    .btn:hover{background:var(--accent-fonce)}
+    .btn.neutre{border-color:#b9c3cf;background:#fff;color:var(--ink)}
+    .btn.neutre:hover{background:#f1f4f8}
+    .btn.danger{border-color:#e6b4b4;background:#fff;color:#b91c1c}
+    .btn.danger:hover{background:#fef2f2}
+    .btn.petit{padding:.25rem .65rem;font-size:.85rem}
+    .avis{margin:0 0 1rem;padding:.7rem 1rem;border:1px solid;border-radius:8px}
+    .avis.succes{border-color:#86efac;background:#f0fdf4;color:#166534}
+    .avis.erreur{border-color:#fca5a5;background:#fef2f2;color:#991b1b}
+    .champs{display:grid;gap:.9rem;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+    .ajout{margin-bottom:1rem}
+    .ajout summary{font-weight:650;cursor:pointer}
+    .ajout[open] summary{margin-bottom:1rem}
+    .boutons{display:flex;gap:.6rem;margin-top:1.1rem}
+    .formcarte{max-width:520px;margin:2rem auto}
+    .formcarte .champs{grid-template-columns:1fr}
+    .tableau{overflow-x:auto;border:1px solid var(--trait);border-radius:8px;background:var(--carte)}
+    table{width:100%;border-collapse:collapse;font-size:.95rem}
+    th{padding:.7rem 1rem;border-bottom:1px solid var(--trait);color:var(--doux);font-size:.85rem;font-weight:600;text-align:left;white-space:nowrap}
+    td{padding:.75rem 1rem;border-bottom:1px solid #edf0f4}
+    tr:last-child td{border-bottom:0}
+    td:first-child{box-shadow:inset 4px 0 0 var(--bande,#cbd5e1)}
+    tr.stock{--bande:var(--stock)}tr.affecte{--bande:var(--affecte)}tr.panne{--bande:var(--panne)}
+    .serie{padding:.15rem .5rem;border:1px dashed #94a3b8;border-radius:4px;background:#f8fafc;font:.85rem "Cascadia Mono",ui-monospace,Consolas,monospace;white-space:nowrap}
+    .pilule{display:inline-block;padding:.1rem .65rem;border-radius:99px;font-size:.85rem;white-space:nowrap}
+    .pilule.stock{background:#dcfce7;color:#166534}.pilule.affecte{background:#e0f2fe;color:#075985}.pilule.panne{background:#fee2e2;color:#991b1b}
+    .doux{color:var(--doux)}
+    .actions{display:flex;gap:.4rem;white-space:nowrap}
+    .actions form{margin:0}
+    .vide{padding:2rem 1rem;color:var(--doux);text-align:center}
+  </style>
 </head>
 <body>
-<header class="entete">
-  <div class="entete-contenu">
-    <a class="marque" href="/">
-      <span class="logo">P</span>
-      <span><strong>Parc IT</strong><small>Gestion du parc informatique</small></span>
-    </a>
-    <nav class="entete-droite">
-      <a href="/api/equipements">API</a>
-      <a href="/export.csv">Export CSV</a>
-      <span class="pastille {{ 'ok' if base_ok else 'ko' }}">
-        <span class="pastille-point"></span>
-        {{ 'Système opérationnel' if base_ok else 'Base indisponible' }}
-      </span>
-    </nav>
-  </div>
-</header>
-
-<main>
-  {% block contenu %}{% endblock %}
-</main>
-
-<footer class="pied">
-  Flask · PostgreSQL · Docker · Nginx · Prometheus · Grafana
-</footer>
+  <header class="bandeau">
+    <a class="marque" href="{{ url_for('index') }}">Parc IT</a>
+    <span class="etat {{ 'ok' if base_ok else 'ko' }}">{{ 'Système opérationnel' if base_ok else 'Base de données indisponible' }}</span>
+    {% if utilisateur %}
+    <div class="compte">
+      <span>{{ utilisateur.nom_utilisateur }}</span>
+      <span class="role">{{ utilisateur.role }}</span>
+      <form method="post" action="{{ url_for('logout') }}"><button class="lien" type="submit">Se déconnecter</button></form>
+    </div>
+    {% endif %}
+  </header>
+  <main class="page">{% block contenu %}{% endblock %}</main>
 </body>
 </html>

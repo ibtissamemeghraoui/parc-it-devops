@@ -43,7 +43,7 @@ jobs:
 
       - name: Test de fumée du conteneur
         run: |
-          docker run -d -p 5000:5000 --name parc-it parc-it:ci
+          docker run -d -p 5000:5000 -e SECRET_KEY="$(openssl rand -hex 32)" --name parc-it parc-it:ci
           sleep 8
           curl --fail http://localhost:5000/health
           docker logs parc-it
