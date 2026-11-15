@@ -117,6 +117,23 @@ et après), suppression et changement de rôle. Un ajout refusé (doublon) n'est
 journalisé, puisqu'il n'a pas eu lieu. Les administrateurs consultent les 200 dernières
 entrées sur la page `/audit`.
 
+## Sauvegarde et restauration
+
+Trois scripts (à lancer avec Git Bash ou Linux, depuis la racine du projet, base démarrée) :
+
+```bash
+bash scripts/sauvegarder.sh                              # crée sauvegardes/parc-AAAAMMJJ-HHMMSS.dump
+bash scripts/restaurer.sh sauvegardes/parc-XXXX.dump     # remplace la base (confirmation demandée)
+bash scripts/tester-sauvegarde.sh                        # prouve qu'une sauvegarde se restaure
+```
+
+La sauvegarde utilise `pg_dump` (format compressé) et conserve les 7 plus récentes
+(`RETENTION=n` pour changer). Le test de restauration recrée la sauvegarde dans une base
+temporaire, compare le nombre de lignes de chaque table avec la base réelle, puis supprime
+la base temporaire : la base de production n'est jamais touchée. Une sauvegarde n'est utile
+que si on sait la restaurer, d'où ce test. Le dossier `sauvegardes/` est exclu de Git : il
+contient les données et les mots de passe hachés, et ne doit jamais être publié.
+
 ## Sécurité
 
 - Le conteneur tourne avec un utilisateur sans privilèges.
@@ -126,6 +143,7 @@ entrées sur la page `/audit`.
 - Les secrets sont dans un fichier `.env` exclu de Git (modèle fourni : `.env.example`).
 - Accès protégé par rôles (admin, lecteur), mots de passe hachés, aucun compte par défaut.
 - L'application refuse de démarrer sans `SECRET_KEY`.
+- Limitation des essais de connexion : 5 échecs par compte et par adresse (30 par adresse) en 15 minutes bloquent la connexion pendant le reste de la fenêtre, même avec le bon mot de passe.
 - Les exports CSV neutralisent les formules (injection Excel et LibreOffice).
 
 ## Supervision
@@ -143,7 +161,7 @@ le débit de requêtes, le temps de réponse moyen et les erreurs serveur.
 - [x] Sécurité (Trivy)
 - [x] Authentification et rôles (sessions, admin/lecteur)
 - [x] Inscription et journal d'audit
-- [ ] Limitation des tentatives de connexion
-- [ ] Sauvegarde et restauration de PostgreSQL
+- [x] Limitation des tentatives de connexion
+- [x] Sauvegarde et restauration de PostgreSQL
 - [ ] Découverte automatique du réseau
 - [ ] Infrastructure as Code (Terraform)
