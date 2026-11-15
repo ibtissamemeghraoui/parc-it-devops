@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block titre %}Journal d'audit – Parc IT{% endblock %}
+{% block contenu %}
+<h1 style="margin-bottom:1rem">Journal d'audit</h1>
+{% if entrees %}
+<div class="tableau">
+  <table>
+    <thead>
+      <tr><th>Date (UTC)</th><th>Utilisateur</th><th>Action</th><th>Détails</th></tr>
+    </thead>
+    <tbody>
+      {% for a in entrees %}
+      <tr>
+        <td style="white-space:nowrap">{{ a.date.strftime('%d/%m/%Y %H:%M:%S') }}</td>
+        <td>{{ a.utilisateur }}</td>
+        <td><strong>{{ a.action }}</strong></td>
+        <td class="doux">{{ a.details or '' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="doux" style="margin-top:.75rem">Les 200 actions les plus récentes sont affichées.</p>
+{% else %}
+<div class="carte vide">Aucune action enregistrée pour l'instant.</div>
+{% endif %}
+<p style="margin-top:1rem"><a class="btn neutre" href="{{ url_for('index') }}">Retour à l'inventaire</a></p>
+{% endblock %}

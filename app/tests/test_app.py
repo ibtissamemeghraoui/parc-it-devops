@@ -1,6 +1,6 @@
 import pytest
 
-from app import Utilisateur, create_app, db
+from app import Audit, Utilisateur, create_app, db
 
 
 def creer_utilisateur(nom, mot_de_passe, role):
@@ -209,3 +209,108 @@ def test_deconnexion(client):
 def test_mot_de_passe_est_hache(client):
     utilisateur = Utilisateur.query.filter_by(nom_utilisateur="admin").first()
     assert utilisateur.mot_de_passe_hash != "motdepasse-admin"
+
+
+# ---------- Journal d'audit ----------
+
+
+def test_ajout_est_journalise(client):
+    client.post("/api/equipements", json=NOUVEAU)
+    entree = Audit.query.filter_by(action="ajout").one()
+    assert entree.utilisateur == "admin"
+    assert "SN001" in entree.details
+
+
+def test_modification_journalise_les_champs(client):
+    eq_id = client.post("/api/equipements", json=NOUVEAU).get_json()["id"]
+    client.put(f"/api/equipements/{eq_id}", json={"statut": "en panne"})
+    entree = Audit.query.filter_by(action="modification").one()
+    assert "en stock → en panne" in entree.details
+
+
+def test_suppression_journalisee(client):
+    eq_id = client.post("/api/equipements", json=NOUVEAU).get_json()["id"]
+    client.delete(f"/api/equipements/{eq_id}")
+    entree = Audit.query.filter_by(action="suppression").one()
+    assert "PC-01" in entree.details
+
+
+def test_doublon_non_journalise(client):
+    client.post("/api/equipements", json=NOUVEAU)
+    client.post("/api/equipements", json=NOUVEAU)
+    assert Audit.query.filter_by(action="ajout").count() == 1
+
+
+def test_connexion_echouee_journalisee(anonyme):
+    se_connecter(anonyme, "admin", "faux")
+    entree = Audit.query.filter_by(action="connexion échouée").one()
+    assert entree.utilisateur == "anonyme"
+    assert "admin" in entree.details
+
+
+def test_page_audit_reservee_aux_admins(client, lecteur, anonyme):
+    assert client.get("/audit").status_code == 200
+    assert lecteur.get("/audit").status_code == 403
+    assert anonyme.get("/audit").status_code == 302
+
+
+def test_page_audit_affiche_les_actions(client):
+    client.post("/api/equipements", json=NOUVEAU)
+    texte = client.get("/audit").get_data(as_text=True)
+    assert "ajout" in texte
+    assert "PC-01" in texte
+
+
+# ---------- Inscription ----------
+
+INSCRIPTION = {
+    "nom_utilisateur": "nouveau",
+    "mot_de_passe": "motdepasse-ok",
+    "confirmation": "motdepasse-ok",
+}
+
+
+def test_page_inscription_accessible(anonyme):
+    assert anonyme.get("/inscription").status_code == 200
+
+
+def test_inscription_cree_un_lecteur_connecte(anonyme):
+    r = anonyme.post("/inscription", data=dict(INSCRIPTION, role="admin"))
+    assert r.status_code == 302
+    utilisateur = Utilisateur.query.filter_by(nom_utilisateur="nouveau").one()
+    assert utilisateur.role == "lecteur"
+    assert anonyme.get("/api/equipements").status_code == 200
+    assert anonyme.post("/api/equipements", json=NOUVEAU).status_code == 403
+
+
+def test_inscription_mots_de_passe_differents(anonyme):
+    r = anonyme.post("/inscription", data=dict(INSCRIPTION, confirmation="autre-chose"))
+    assert r.status_code == 400
+    assert Utilisateur.query.filter_by(nom_utilisateur="nouveau").first() is None
+
+
+def test_inscription_mot_de_passe_trop_court(anonyme):
+    r = anonyme.post("/inscription", data=dict(INSCRIPTION, mot_de_passe="abc", confirmation="abc"))
+    assert r.status_code == 400
+
+
+def test_inscription_refuse_nom_deja_pris_meme_en_majuscules(anonyme):
+    r = anonyme.post("/inscription", data=dict(INSCRIPTION, nom_utilisateur="Admin"))
+    assert r.status_code == 400
+    assert "déjà pris" in r.get_data(as_text=True)
+
+
+def test_inscription_refuse_nom_invalide(anonyme):
+    r = anonyme.post("/inscription", data=dict(INSCRIPTION, nom_utilisateur="a b"))
+    assert r.status_code == 400
+
+
+def test_inscription_est_journalisee(anonyme):
+    anonyme.post("/inscription", data=INSCRIPTION)
+    entree = Audit.query.filter_by(action="inscription").one()
+    assert entree.utilisateur == "nouveau"
+
+
+def test_inscription_fermee(client, anonyme):
+    client.application.config["INSCRIPTION_OUVERTE"] = False
+    assert anonyme.get("/inscription").status_code == 404

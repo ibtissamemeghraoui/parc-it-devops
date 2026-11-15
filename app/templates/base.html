@@ -18,6 +18,7 @@
     .compte form{margin:0}
     .role{padding:.1rem .6rem;border-radius:99px;background:rgba(255,255,255,.16);font-size:.8rem}
     .lien{padding:.3rem .7rem;border:1px solid rgba(255,255,255,.4);border-radius:6px;background:none;color:#fff;font:inherit;font-size:.875rem;cursor:pointer}
+    a.lien{text-decoration:none}
     .lien:hover{background:rgba(255,255,255,.12)}
     .page{max-width:1200px;margin:0 auto;padding:1.5rem clamp(1rem,4vw,2.5rem) 3rem}
     h1,h2{margin:0;line-height:1.2}
@@ -82,6 +83,7 @@
     <span class="etat {{ 'ok' if base_ok else 'ko' }}">{{ 'Système opérationnel' if base_ok else 'Base de données indisponible' }}</span>
     {% if utilisateur %}
     <div class="compte">
+      {% if utilisateur.role == 'admin' %}<a class="lien" href="{{ url_for('audit') }}">Journal d'audit</a>{% endif %}
       <span>{{ utilisateur.nom_utilisateur }}</span>
       <span class="role">{{ utilisateur.role }}</span>
       <form method="post" action="{{ url_for('logout') }}"><button class="lien" type="submit">Se déconnecter</button></form>
