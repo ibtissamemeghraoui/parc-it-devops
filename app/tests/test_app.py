@@ -1,6 +1,8 @@
+from datetime import timedelta
+
 import pytest
 
-from app import Audit, Utilisateur, create_app, db
+from app import Audit, Tentative, Utilisateur, create_app, db, maintenant
 
 
 def creer_utilisateur(nom, mot_de_passe, role):
@@ -314,3 +316,62 @@ def test_inscription_est_journalisee(anonyme):
 def test_inscription_fermee(client, anonyme):
     client.application.config["INSCRIPTION_OUVERTE"] = False
     assert anonyme.get("/inscription").status_code == 404
+
+
+# ---------- Limitation des tentatives de connexion ----------
+
+
+def echouer(client, fois, nom="admin"):
+    for _ in range(fois):
+        assert se_connecter(client, nom, "faux").status_code == 401
+
+
+def test_blocage_apres_cinq_echecs(anonyme):
+    echouer(anonyme, 5)
+    r = se_connecter(anonyme, "admin", "faux")
+    assert r.status_code == 429
+    assert "Trop de tentatives" in r.get_data(as_text=True)
+
+
+def test_blocage_refuse_meme_le_bon_mot_de_passe(anonyme):
+    echouer(anonyme, 5)
+    assert se_connecter(anonyme, "admin", "motdepasse-admin").status_code == 429
+    assert anonyme.get("/api/equipements").status_code == 401
+
+
+def test_blocage_propre_au_compte(anonyme):
+    echouer(anonyme, 5)
+    r = se_connecter(anonyme, "lecteur", "motdepasse-lecteur")
+    assert r.status_code == 302
+
+
+def test_quatre_echecs_ne_bloquent_pas(anonyme):
+    echouer(anonyme, 4)
+    assert se_connecter(anonyme, "admin", "motdepasse-admin").status_code == 302
+
+
+def test_succes_efface_les_echecs(anonyme):
+    echouer(anonyme, 3)
+    assert se_connecter(anonyme, "admin", "motdepasse-admin").status_code == 302
+    assert Tentative.query.count() == 0
+
+
+def test_blocage_expire_avec_le_temps(anonyme):
+    echouer(anonyme, 5)
+    Tentative.query.update({"date": maintenant() - timedelta(minutes=16)})
+    db.session.commit()
+    assert se_connecter(anonyme, "admin", "motdepasse-admin").status_code == 302
+
+
+def test_blocage_par_adresse(anonyme):
+    anonyme.application.config["TENTATIVES_MAX_ADRESSE"] = 3
+    for nom in ("a1", "a2", "a3"):
+        echouer(anonyme, 1, nom=nom)
+    assert se_connecter(anonyme, "admin", "motdepasse-admin").status_code == 429
+
+
+def test_verrouillage_journalise_une_seule_fois(anonyme):
+    echouer(anonyme, 5)
+    se_connecter(anonyme, "admin", "faux")
+    assert Audit.query.filter_by(action="verrouillage").count() == 1
+    assert Tentative.query.count() == 5
