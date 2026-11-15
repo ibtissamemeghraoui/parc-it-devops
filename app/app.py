@@ -1,7 +1,8 @@
 import csv
 import io
 import os
-from datetime import timedelta
+import re
+from datetime import datetime, timedelta, timezone
 from functools import wraps
 
 import click
@@ -26,6 +27,7 @@ db = SQLAlchemy()
 
 STATUTS = ("en stock", "affecté", "en panne")
 ROLES = ("admin", "lecteur")
+NOM_VALIDE = re.compile(r"^[A-Za-z0-9._-]{3,30}$")
 CHAMPS_OBLIGATOIRES = ("nom", "type", "numero_serie")
 CLASSES = {"en stock": "stock", "affecté": "affecte", "en panne": "panne"}
 COULEURS = {"en stock": "#22c55e", "affecté": "#38bdf8", "en panne": "#ef4444"}
@@ -71,6 +73,20 @@ class Utilisateur(db.Model):
 
     def verifier_mot_de_passe(self, mot_de_passe):
         return check_password_hash(self.mot_de_passe_hash, mot_de_passe)
+
+
+class Audit(db.Model):
+    """Journal des actions : qui a fait quoi, et quand (heure UTC)."""
+
+    id = db.Column(db.Integer, primary_key=True)
+    date = db.Column(
+        db.DateTime,
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
+    )
+    utilisateur = db.Column(db.String(50), nullable=False)
+    action = db.Column(db.String(30), nullable=False)
+    details = db.Column(db.String(255))
 
 
 def verifier_base():
@@ -148,6 +164,24 @@ def exiger(role=None):
     return decorateur
 
 
+def journaliser(action, details=None, auteur=None):
+    """Ajoute une entrée au journal, dans la même transaction que l'action."""
+    if auteur is None:
+        courant = utilisateur_courant()
+        auteur = courant.nom_utilisateur if courant else "anonyme"
+    db.session.add(Audit(utilisateur=auteur, action=action, details=(details or "")[:255] or None))
+
+
+def changements(eq, nouveaux):
+    """Décrit ce qui change entre un équipement et ses nouvelles valeurs."""
+    morceaux = []
+    for cle, valeur in nouveaux.items():
+        ancien = getattr(eq, cle)
+        if (ancien or None) != (valeur or None):
+            morceaux.append(f"{cle} : {ancien or '—'} → {valeur or '—'}")
+    return ", ".join(morceaux)
+
+
 def create_app(config=None):
     app = Flask(__name__)
     # La connexion à la base et la clé secrète viennent de variables
@@ -157,6 +191,8 @@ def create_app(config=None):
     app.config["SECRET_KEY"] = os.getenv("SECRET_KEY")
     app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
     app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=8)
+    # Mettre INSCRIPTION_OUVERTE=0 dans .env pour fermer les inscriptions.
+    app.config["INSCRIPTION_OUVERTE"] = os.getenv("INSCRIPTION_OUVERTE", "1") == "1"
     if config:
         app.config.update(config)
     if not app.config["SECRET_KEY"]:
@@ -174,7 +210,11 @@ def create_app(config=None):
     @app.context_processor
     def contexte():
         ok = base_est_ok()
-        return {"base_ok": ok, "utilisateur": utilisateur_courant() if ok else None}
+        return {
+            "base_ok": ok,
+            "utilisateur": utilisateur_courant() if ok else None,
+            "inscription_ouverte": app.config["INSCRIPTION_OUVERTE"],
+        }
 
     @app.get("/health")
     def health():
@@ -196,17 +236,63 @@ def create_app(config=None):
             mot_de_passe = request.form.get("mot_de_passe", "")
             utilisateur = Utilisateur.query.filter_by(nom_utilisateur=nom).first()
             if utilisateur is None or not utilisateur.verifier_mot_de_passe(mot_de_passe):
+                journaliser("connexion échouée", f"compte : {nom[:40]}", auteur="anonyme")
+                db.session.commit()
                 return render_template("login.html", erreur="Identifiants invalides."), 401
             session.clear()
             session["user_id"] = utilisateur.id
             session.permanent = True
+            journaliser("connexion", auteur=utilisateur.nom_utilisateur)
+            db.session.commit()
             return redirect(url_for("index"))
         return render_template("login.html", erreur=None)
 
     @app.post("/logout")
     def logout():
+        if utilisateur_courant():
+            journaliser("déconnexion")
+            db.session.commit()
         session.clear()
         return redirect(url_for("login"))
+
+    @app.route("/inscription", methods=["GET", "POST"])
+    def inscription():
+        if not app.config["INSCRIPTION_OUVERTE"]:
+            abort(404)
+        if request.method == "POST":
+            nom = request.form.get("nom_utilisateur", "").strip()
+            mot_de_passe = request.form.get("mot_de_passe", "")
+            confirmation = request.form.get("confirmation", "")
+            erreur = None
+            if not NOM_VALIDE.match(nom):
+                erreur = "Le nom d'utilisateur doit faire 3 à 30 caractères (lettres, chiffres, . _ -)."
+            elif len(mot_de_passe) < 8:
+                erreur = "Le mot de passe doit faire au moins 8 caractères."
+            elif mot_de_passe != confirmation:
+                erreur = "Les deux mots de passe ne sont pas identiques."
+            elif Utilisateur.query.filter(
+                func.lower(Utilisateur.nom_utilisateur) == nom.lower()
+            ).first():
+                erreur = "Ce nom d'utilisateur est déjà pris."
+            if erreur:
+                return render_template("inscription.html", erreur=erreur, nom=nom), 400
+            # Le rôle est toujours « lecteur » : on ne s'attribue jamais admin soi-même.
+            utilisateur = Utilisateur(nom_utilisateur=nom, role="lecteur")
+            utilisateur.definir_mot_de_passe(mot_de_passe)
+            db.session.add(utilisateur)
+            try:
+                db.session.commit()
+            except IntegrityError:
+                db.session.rollback()
+                erreur = "Ce nom d'utilisateur est déjà pris."
+                return render_template("inscription.html", erreur=erreur, nom=nom), 400
+            session.clear()
+            session["user_id"] = utilisateur.id
+            session.permanent = True
+            journaliser("inscription", auteur=nom)
+            db.session.commit()
+            return redirect(url_for("index"))
+        return render_template("inscription.html", erreur=None, nom="")
 
     # ---------- Pages web ----------
     @app.get("/")
@@ -286,6 +372,7 @@ def create_app(config=None):
         if not all(champs[c] for c in CHAMPS_OBLIGATOIRES):
             return redirect(url_for("index", msg="invalide"))
         db.session.add(Equipement(**champs))
+        journaliser("ajout", f"{champs['nom']} ({champs['numero_serie']})")
         try:
             db.session.commit()
         except IntegrityError:
@@ -306,8 +393,11 @@ def create_app(config=None):
         champs = lire_formulaire(request.form)
         if not all(champs[c] for c in CHAMPS_OBLIGATOIRES):
             return redirect(url_for("index", msg="invalide"))
+        diff = changements(eq, champs)
         for cle, valeur in champs.items():
             setattr(eq, cle, valeur)
+        if diff:
+            journaliser("modification", f"{eq.nom} — {diff}")
         try:
             db.session.commit()
         except IntegrityError:
@@ -319,6 +409,7 @@ def create_app(config=None):
     @exiger("admin")
     def supprimer(eq_id):
         eq = db.get_or_404(Equipement, eq_id)
+        journaliser("suppression", f"{eq.nom} ({eq.numero_serie})")
         db.session.delete(eq)
         db.session.commit()
         return redirect(url_for("index", msg="supprime"))
@@ -347,6 +438,7 @@ def create_app(config=None):
             affectation=data.get("affectation"),
         )
         db.session.add(eq)
+        journaliser("ajout", f"{eq.nom} ({eq.numero_serie})")
         try:
             db.session.commit()
         except IntegrityError:
@@ -366,9 +458,13 @@ def create_app(config=None):
         data = request.get_json(silent=True) or {}
         if "statut" in data and data["statut"] not in STATUTS:
             return jsonify(erreur="statut invalide", valeurs=list(STATUTS)), 400
-        for champ in ("nom", "type", "numero_serie", "statut", "affectation"):
+        champs = ("nom", "type", "numero_serie", "statut", "affectation")
+        diff = changements(eq, {c: data[c] for c in champs if c in data})
+        for champ in champs:
             if champ in data:
                 setattr(eq, champ, data[champ])
+        if diff:
+            journaliser("modification", f"{eq.nom} — {diff}")
         try:
             db.session.commit()
         except IntegrityError:
@@ -380,9 +476,17 @@ def create_app(config=None):
     @exiger("admin")
     def api_supprimer(eq_id):
         eq = db.get_or_404(Equipement, eq_id)
+        journaliser("suppression", f"{eq.nom} ({eq.numero_serie})")
         db.session.delete(eq)
         db.session.commit()
         return "", 204
+
+    # ---------- Journal d'audit ----------
+    @app.get("/audit")
+    @exiger("admin")
+    def audit():
+        entrees = Audit.query.order_by(Audit.id.desc()).limit(200).all()
+        return render_template("audit.html", entrees=entrees)
 
     # ---------- Commande pour créer les comptes ----------
     @app.cli.command("creer-utilisateur")
@@ -400,6 +504,19 @@ def create_app(config=None):
         db.session.add(utilisateur)
         db.session.commit()
         click.echo(f"Utilisateur {nom_utilisateur} créé avec le rôle {role}.")
+
+    @app.cli.command("changer-role")
+    @click.argument("nom_utilisateur")
+    @click.argument("role", type=click.Choice(ROLES))
+    def changer_role(nom_utilisateur, role):
+        """Change le rôle d'un utilisateur existant (par exemple pour le passer admin)."""
+        utilisateur = Utilisateur.query.filter_by(nom_utilisateur=nom_utilisateur).first()
+        if utilisateur is None:
+            raise click.ClickException("Utilisateur introuvable.")
+        utilisateur.role = role
+        journaliser("changement de rôle", f"{nom_utilisateur} → {role}", auteur="ligne de commande")
+        db.session.commit()
+        click.echo(f"{nom_utilisateur} a maintenant le rôle {role}.")
 
     return app
 

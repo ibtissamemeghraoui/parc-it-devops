@@ -11,5 +11,6 @@
     </div>
     <div class="boutons"><button class="btn" type="submit">Se connecter</button></div>
   </form>
+  {% if inscription_ouverte %}<p class="doux" style="margin-top:1rem">Pas encore de compte ? <a href="{{ url_for('inscription') }}">Créer un compte</a></p>{% endif %}
 </section>
 {% endblock %}
