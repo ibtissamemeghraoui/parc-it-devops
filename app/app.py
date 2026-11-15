@@ -1,5 +1,6 @@
 import csv
 import io
+import math
 import os
 import re
 from datetime import datetime, timedelta, timezone
@@ -21,6 +22,7 @@ from flask_sqlalchemy import SQLAlchemy
 from prometheus_flask_exporter import PrometheusMetrics
 from sqlalchemy import func, or_, text
 from sqlalchemy.exc import IntegrityError
+from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import check_password_hash, generate_password_hash
 
 db = SQLAlchemy()
@@ -87,6 +89,20 @@ class Audit(db.Model):
     utilisateur = db.Column(db.String(50), nullable=False)
     action = db.Column(db.String(30), nullable=False)
     details = db.Column(db.String(255))
+
+
+def maintenant():
+    """Heure UTC sans fuseau, comme les dates stockées en base."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+class Tentative(db.Model):
+    """Échecs de connexion récents, pour limiter les essais de mots de passe."""
+
+    id = db.Column(db.Integer, primary_key=True)
+    date = db.Column(db.DateTime, nullable=False, default=maintenant, index=True)
+    nom = db.Column(db.String(50), nullable=False)
+    adresse = db.Column(db.String(45), nullable=False)
 
 
 def verifier_base():
@@ -182,8 +198,30 @@ def changements(eq, nouveaux):
     return ", ".join(morceaux)
 
 
+def attente(requete, maximum, fenetre):
+    """Minutes à attendre si `maximum` échecs sont déjà dans la fenêtre, sinon 0."""
+    tentatives = requete.order_by(Tentative.date).all()
+    if len(tentatives) < maximum:
+        return 0
+    expiration = tentatives[len(tentatives) - maximum].date + fenetre
+    secondes = (expiration - maintenant()).total_seconds()
+    return max(1, math.ceil(secondes / 60)) if secondes > 0 else 0
+
+
+def minutes_a_attendre(nom, adresse, cfg):
+    """Deux limites : par compte depuis une adresse, et par adresse seule."""
+    fenetre = timedelta(minutes=cfg["BLOCAGE_MINUTES"])
+    recentes = Tentative.query.filter(Tentative.date >= maintenant() - fenetre)
+    return max(
+        attente(recentes.filter_by(nom=nom, adresse=adresse), cfg["TENTATIVES_MAX"], fenetre),
+        attente(recentes.filter_by(adresse=adresse), cfg["TENTATIVES_MAX_ADRESSE"], fenetre),
+    )
+
+
 def create_app(config=None):
     app = Flask(__name__)
+    # Derrière Nginx : lit l'adresse du visiteur dans X-Forwarded-For (un seul proxy).
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1)
     # La connexion à la base et la clé secrète viennent de variables
     # d'environnement, jamais du code.
     app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URL", "sqlite:///parc.db")
@@ -193,6 +231,10 @@ def create_app(config=None):
     app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=8)
     # Mettre INSCRIPTION_OUVERTE=0 dans .env pour fermer les inscriptions.
     app.config["INSCRIPTION_OUVERTE"] = os.getenv("INSCRIPTION_OUVERTE", "1") == "1"
+    # Limitation des essais de connexion : échecs permis pendant la fenêtre de blocage.
+    app.config["TENTATIVES_MAX"] = 5
+    app.config["TENTATIVES_MAX_ADRESSE"] = 30
+    app.config["BLOCAGE_MINUTES"] = 15
     if config:
         app.config.update(config)
     if not app.config["SECRET_KEY"]:
@@ -234,14 +276,26 @@ def create_app(config=None):
         if request.method == "POST":
             nom = request.form.get("nom_utilisateur", "").strip()
             mot_de_passe = request.form.get("mot_de_passe", "")
+            adresse = (request.remote_addr or "inconnue")[:45]
+            minutes = minutes_a_attendre(nom[:50], adresse, app.config)
+            if minutes:
+                # Même un bon mot de passe est refusé : sinon l'essai continuerait.
+                erreur = f"Trop de tentatives. Réessaie dans {minutes} minute(s)."
+                return render_template("login.html", erreur=erreur), 429
             utilisateur = Utilisateur.query.filter_by(nom_utilisateur=nom).first()
             if utilisateur is None or not utilisateur.verifier_mot_de_passe(mot_de_passe):
+                limite = maintenant() - timedelta(minutes=app.config["BLOCAGE_MINUTES"])
+                Tentative.query.filter(Tentative.date < limite).delete()
+                db.session.add(Tentative(nom=nom[:50], adresse=adresse))
                 journaliser("connexion échouée", f"compte : {nom[:40]}", auteur="anonyme")
+                if minutes_a_attendre(nom[:50], adresse, app.config):
+                    journaliser("verrouillage", f"compte : {nom[:40]} ({adresse})", auteur="anonyme")
                 db.session.commit()
                 return render_template("login.html", erreur="Identifiants invalides."), 401
             session.clear()
             session["user_id"] = utilisateur.id
             session.permanent = True
+            Tentative.query.filter_by(nom=nom[:50], adresse=adresse).delete()
             journaliser("connexion", auteur=utilisateur.nom_utilisateur)
             db.session.commit()
             return redirect(url_for("index"))

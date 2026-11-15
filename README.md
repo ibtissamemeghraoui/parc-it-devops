@@ -126,6 +126,7 @@ entrées sur la page `/audit`.
 - Les secrets sont dans un fichier `.env` exclu de Git (modèle fourni : `.env.example`).
 - Accès protégé par rôles (admin, lecteur), mots de passe hachés, aucun compte par défaut.
 - L'application refuse de démarrer sans `SECRET_KEY`.
+- Limitation des essais de connexion : 5 échecs par compte et par adresse (30 par adresse) en 15 minutes bloquent la connexion pendant le reste de la fenêtre, même avec le bon mot de passe.
 - Les exports CSV neutralisent les formules (injection Excel et LibreOffice).
 
 ## Supervision
@@ -143,7 +144,7 @@ le débit de requêtes, le temps de réponse moyen et les erreurs serveur.
 - [x] Sécurité (Trivy)
 - [x] Authentification et rôles (sessions, admin/lecteur)
 - [x] Inscription et journal d'audit
-- [ ] Limitation des tentatives de connexion
+- [x] Limitation des tentatives de connexion
 - [ ] Sauvegarde et restauration de PostgreSQL
 - [ ] Découverte automatique du réseau
 - [ ] Infrastructure as Code (Terraform)
