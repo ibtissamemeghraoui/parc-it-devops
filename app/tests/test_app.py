@@ -1,9 +1,10 @@
+import socket
 from datetime import timedelta
 
 import pytest
 
-from app import Audit, Tentative, Utilisateur, create_app, db, maintenant
-
+import decouverte
+from app import Audit, Equipement, Tentative, Utilisateur, create_app, db, maintenant
 
 def creer_utilisateur(nom, mot_de_passe, role):
     utilisateur = Utilisateur(nom_utilisateur=nom, role=role)
@@ -375,3 +376,103 @@ def test_verrouillage_journalise_une_seule_fois(anonyme):
     se_connecter(anonyme, "admin", "faux")
     assert Audit.query.filter_by(action="verrouillage").count() == 1
     assert Tentative.query.count() == 5
+
+    # ---------- Découverte du réseau ----------
+
+MACHINE = {"ip": "192.168.1.10", "nom": "pc-bureau", "ports": [22, 80]}
+
+
+@pytest.mark.parametrize("texte", ["192.168.1.0/24", "10.0.0.5", "172.16.5.0/25", " 192.168.0.7/24 "])
+def test_reseaux_acceptes(texte):
+    assert decouverte.valider_reseau(texte).num_addresses <= 256
+
+
+@pytest.mark.parametrize(
+    "texte",
+    ["8.8.8.8/24", "192.168.0.0/16", "127.0.0.0/24", "169.254.1.0/24", "224.0.0.0/24", "::1", "abc", ""],
+)
+def test_reseaux_refuses(texte):
+    with pytest.raises(decouverte.ReseauInvalide):
+        decouverte.valider_reseau(texte)
+
+
+def test_scanner_hote_distingue_port_ouvert_et_ferme():
+    ecoute = socket.socket()
+    ecoute.bind(("127.0.0.1", 0))
+    ecoute.listen()
+    ouvert = ecoute.getsockname()[1]
+    libre = socket.socket()
+    libre.bind(("127.0.0.1", 0))
+    ferme = libre.getsockname()[1]
+    libre.close()
+    try:
+        presente, ports = decouverte.scanner_hote("127.0.0.1", [ouvert, ferme], delai=1)
+    finally:
+        ecoute.close()
+    assert presente is True
+    assert ports == [ouvert]
+
+
+def test_decouverte_reservee_aux_admins(client, lecteur, anonyme):
+    assert client.get("/decouverte").status_code == 200
+    assert lecteur.get("/decouverte").status_code == 403
+    assert anonyme.get("/decouverte").status_code == 302
+
+
+def test_lecteur_ne_peut_pas_scanner(lecteur):
+    assert lecteur.post("/decouverte", data={"reseau": "192.168.1.0/24"}).status_code == 403
+
+
+def test_scan_affiche_les_machines_et_journalise(client, monkeypatch):
+    monkeypatch.setattr(decouverte, "scanner_reseau", lambda reseau: [dict(MACHINE)])
+    r = client.post("/decouverte", data={"reseau": "192.168.1.0/24"})
+    texte = r.get_data(as_text=True)
+    assert r.status_code == 200
+    assert "192.168.1.10" in texte
+    assert "pc-bureau" in texte
+    assert Audit.query.filter_by(action="scan réseau").count() == 1
+
+
+def test_scan_refuse_un_reseau_public(client):
+    r = client.post("/decouverte", data={"reseau": "8.8.8.0/24"})
+    assert r.status_code == 400
+    assert "privés" in r.get_data(as_text=True)
+
+
+def test_scan_deja_en_cours(client):
+    assert decouverte.VERROU.acquire(blocking=False)
+    try:
+        r = client.post("/decouverte", data={"reseau": "192.168.1.0/24"})
+    finally:
+        decouverte.VERROU.release()
+    assert r.status_code == 429
+
+
+def test_ajout_depuis_la_decouverte(client):
+    r = client.post("/decouverte/ajouter", data={"ip": "192.168.1.10", "nom": "pc-bureau"})
+    assert r.status_code == 302
+    eq = Equipement.query.filter_by(numero_serie="IP-192.168.1.10").one()
+    assert eq.nom == "pc-bureau"
+    assert eq.type == "Découvert"
+
+
+def test_ajout_decouverte_doublon(client):
+    client.post("/decouverte/ajouter", data={"ip": "192.168.1.10"})
+    r = client.post("/decouverte/ajouter", data={"ip": "192.168.1.10"}, follow_redirects=True)
+    assert "existe déjà" in r.get_data(as_text=True)
+
+
+def test_ajout_decouverte_refuse_une_adresse_publique_ou_un_reseau(client):
+    assert client.post("/decouverte/ajouter", data={"ip": "8.8.8.8"}).status_code == 400
+    assert client.post("/decouverte/ajouter", data={"ip": "192.168.1.0/24"}).status_code == 400
+
+
+def test_ajout_decouverte_reserve_aux_admins(lecteur):
+    assert lecteur.post("/decouverte/ajouter", data={"ip": "192.168.1.10"}).status_code == 403
+
+
+def test_scan_signale_les_machines_deja_connues(client, monkeypatch):
+    client.post("/decouverte/ajouter", data={"ip": "192.168.1.10"})
+    monkeypatch.setattr(decouverte, "scanner_reseau", lambda reseau: [dict(MACHINE)])
+    texte = client.post("/decouverte", data={"reseau": "192.168.1.0/24"}).get_data(as_text=True)
+    assert "Déjà dans l'inventaire" in texte
