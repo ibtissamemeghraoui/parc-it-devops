@@ -83,7 +83,7 @@
     <span class="etat {{ 'ok' if base_ok else 'ko' }}">{{ 'Système opérationnel' if base_ok else 'Base de données indisponible' }}</span>
     {% if utilisateur %}
     <div class="compte">
-      {% if utilisateur.role == 'admin' %}<a class="lien" href="{{ url_for('audit') }}">Journal d'audit</a>{% endif %}
+    {% if utilisateur.role == 'admin' %}<a class="lien" href="{{ url_for('decouverte_page') }}">Découverte réseau</a><a class="lien" href="{{ url_for('audit') }}">Journal d'audit</a>{% endif %}{% if utilisateur.role == 'admin' %}<a class="lien" href="{{ url_for('decouverte_page') }}">Découverte réseau</a><a class="lien" href="{{ url_for('audit') }}">Journal d'audit</a>{% endif %}
       <span>{{ utilisateur.nom_utilisateur }}</span>
       <span class="role">{{ utilisateur.role }}</span>
       <form method="post" action="{{ url_for('logout') }}"><button class="lien" type="submit">Se déconnecter</button></form>
