@@ -117,6 +117,30 @@ et après), suppression et changement de rôle. Un ajout refusé (doublon) n'est
 journalisé, puisqu'il n'a pas eu lieu. Les administrateurs consultent les 200 dernières
 entrées sur la page `/audit`.
 
+## Infrastructure as Code (Terraform)
+
+Le dossier `infra/terraform/` décrit en code les ressources Docker de l'application
+(réseau, volume, PostgreSQL, application, Nginx) avec le fournisseur Docker. Il reprend
+`docker-compose.yml`, sauf la supervision qui reste dans Compose. L'image de l'application
+est construite à part avec `docker build` (première commande ci-dessous), puis déployée par Terraform.
+
+```bash
+docker build -t parc-it:terraform -f docker/Dockerfile .   # depuis la racine : construit l'image
+cd infra/terraform
+cp terraform.tfvars.example terraform.tfvars   # puis renseigner les secrets (fichier ignoré par Git)
+terraform init
+terraform plan      # montre ce qui sera créé, sans rien modifier
+terraform apply     # crée l'infrastructure : http://localhost:8081
+terraform destroy   # supprime tout
+```
+
+Les secrets (`postgres_password`, `secret_key`) sont des variables sensibles : ils ne sont
+jamais écrits dans le code et masqués dans les sorties. Sous Windows avec Docker Desktop,
+ajouter `docker_host = "npipe:////./pipe/docker_engine"` dans `terraform.tfvars`.
+Les ressources Terraform (préfixe `parc-it-`, port 8081) coexistent avec celles de Compose
+(port 8080). Un workflow GitHub Actions vérifie le format et la validité de la configuration
+à chaque pull request qui touche `infra/terraform/`.
+
 ## Sauvegarde et restauration
 
 Trois scripts (à lancer avec Git Bash ou Linux, depuis la racine du projet, base démarrée) :
@@ -164,4 +188,4 @@ le débit de requêtes, le temps de réponse moyen et les erreurs serveur.
 - [x] Limitation des tentatives de connexion
 - [x] Sauvegarde et restauration de PostgreSQL
 - [ ] Découverte automatique du réseau
-- [ ] Infrastructure as Code (Terraform)
+- [x] Infrastructure as Code (Terraform)

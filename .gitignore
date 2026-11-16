@@ -7,3 +7,9 @@ instance/
 .pytest_cache/
 
 sauvegardes/
+
+.terraform/
+*.tfstate
+*.tfstate.*
+terraform.tfvars
+crash.log
