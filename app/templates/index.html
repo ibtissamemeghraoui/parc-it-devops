@@ -4,11 +4,19 @@
 {% set admin = utilisateur and utilisateur.role == 'admin' %}
 {% if message %}<p class="avis {{ message[0] }}" role="status">{{ message[1] }}</p>{% endif %}
 
+<section class="kpi" aria-label="Indicateurs">
+  <div><span>Total</span><b>{{ total }}</b></div>
+  {% for s in statuts %}
+  <div class="{{ classes.get(s, '') }}"><span>{{ s }}</span><b>{{ compteurs[s] }}</b><small>{{ (compteurs[s] * 100 / total)|round|int if total else 0 }} %</small></div>
+  {% endfor %}
+</section>
+
 <div class="grille">
   <aside class="cote">
     <section class="carte">
       <h2>Répartition par statut</h2>
-      <div class="donut" style="background:{{ donut }}"><span>{{ total }}</span></div>      <ul class="legende">
+      <div class="donut" style="background:{{ donut }}"><span>{{ total }}</span></div>
+      <ul class="legende">
         {% for s in statuts %}
         <li><i class="pt {{ classes.get(s, '') }}"></i>{{ s }}<b>{{ compteurs[s] }}</b></li>
         {% endfor %}
@@ -19,7 +27,8 @@
       {% if par_type %}
       <ul class="types">
         {% for t, n, p in par_type %}
-        <li><span>{{ t }}</span><b>{{ n }}</b><span class="barre"><i style="width:{{ p }}%"></i></span></li>        {% endfor %}
+        <li><span>{{ t }}</span><b>{{ n }}</b><span class="barre"><i style="width:{{ p }}%"></i></span></li>
+        {% endfor %}
       </ul>
       {% else %}
       <p class="doux">Aucun équipement pour l'instant.</p>
@@ -63,22 +72,22 @@
     </nav>
 
     {% if equipements %}
-    <div class="tableau">
-      <table>
+    <div class="tableau cartes">
+      <table class="triable">
         <thead>
           <tr>
             <th>Nom</th><th>Type</th><th>Numéro de série</th><th>Statut</th><th>Affectation</th>
-            {% if admin %}<th>Actions</th>{% endif %}
+            {% if admin %}<th class="sans-tri">Actions</th>{% endif %}
           </tr>
         </thead>
         <tbody>
           {% for e in equipements %}
           <tr class="{{ classes.get(e.statut, '') }}">
-            <td><strong>{{ e.nom }}</strong></td>
-            <td>{{ e.type }}</td>
-            <td><span class="serie">{{ e.numero_serie }}</span></td>
-            <td><span class="pilule {{ classes.get(e.statut, '') }}">{{ e.statut }}</span></td>
-            <td>{% if e.affectation %}{{ e.affectation }}{% else %}<span class="doux">Non affecté</span>{% endif %}</td>
+            <td data-label="Nom"><strong>{{ e.nom }}</strong></td>
+            <td data-label="Type">{{ e.type }}</td>
+            <td data-label="Numéro de série"><span class="serie">{{ e.numero_serie }}</span></td>
+            <td data-label="Statut"><span class="pilule {{ classes.get(e.statut, '') }}">{{ e.statut }}</span></td>
+            <td data-label="Affectation">{% if e.affectation %}{{ e.affectation }}{% else %}<span class="doux">Non affecté</span>{% endif %}</td>
             {% if admin %}
             <td class="actions">
               <a class="btn neutre petit" href="{{ url_for('modifier_formulaire', eq_id=e.id) }}">Modifier</a>
