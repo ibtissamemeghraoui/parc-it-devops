@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block titre %}Découverte du réseau – Parc IT{% endblock %}
+{% block contenu %}
+<h1>Découverte du réseau</h1>
+<p class="doux" style="margin:.4rem 0 1rem">Cherche les machines allumées d'un réseau privé (connexions sur quelques ports courants). À utiliser uniquement sur un réseau que tu administres ou que tu as le droit de tester.</p>
+
+<form class="carte" method="post" action="{{ url_for('decouverte_page') }}">
+  <div class="recherche">
+    <input name="reseau" value="{{ reseau }}" placeholder="192.168.1.0/24" required aria-label="Réseau à scanner">
+    <button class="btn" type="submit">Lancer le scan</button>
+  </div>
+  <p class="doux" style="margin:.75rem 0 0;font-size:.9rem">Réseaux privés uniquement, 256 adresses au maximum. Le scan peut durer jusqu'à une minute.</p>
+</form>
+
+{% if erreur %}<p class="avis erreur" role="alert" style="margin-top:1rem">{{ erreur }}</p>{% endif %}
+
+{% if resultats is not none %}
+<h2 style="margin:1.5rem 0 .75rem">{{ resultats|length }} machine(s) trouvée(s)</h2>
+{% if resultats %}
+<div class="tableau">
+  <table>
+    <thead>
+      <tr><th>Adresse IP</th><th>Nom</th><th>Ports ouverts</th><th>Inventaire</th></tr>
+    </thead>
+    <tbody>
+      {% for m in resultats %}
+      <tr>
+        <td><span class="serie">{{ m.ip }}</span></td>
+        <td>{% if m.nom %}{{ m.nom }}{% else %}<span class="doux">Inconnu</span>{% endif %}</td>
+        <td>
+          {% for p in m.ports %}<span class="serie">{{ p }} {{ noms.get(p, '') }}</span> {% else %}<span class="doux">Aucun (la machine répond)</span>{% endfor %}
+        </td>
+        <td>
+          {% if m.connu %}
+          <span class="doux">Déjà dans l'inventaire</span>
+          {% else %}
+          <form method="post" action="{{ url_for('decouverte_ajouter') }}" style="margin:0">
+            <input type="hidden" name="ip" value="{{ m.ip }}">
+            <input type="hidden" name="nom" value="{{ m.nom or '' }}">
+            <button class="btn neutre petit" type="submit">Ajouter à l'inventaire</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="carte vide">Aucune machine n'a répondu. Une machine dont le pare-feu ignore tout n'est pas détectée.</div>
+{% endif %}
+{% endif %}
+<p style="margin-top:1rem"><a class="btn neutre" href="{{ url_for('index') }}">Retour à l'inventaire</a></p>
+{% endblock %}

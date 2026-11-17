@@ -25,6 +25,7 @@ from sqlalchemy.exc import IntegrityError
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import check_password_hash, generate_password_hash
 
+import decouverte
 db = SQLAlchemy()
 
 STATUTS = ("en stock", "affecté", "en panne")
@@ -535,6 +536,65 @@ def create_app(config=None):
         db.session.commit()
         return "", 204
 
+        # ---------- Découverte du réseau ----------
+    @app.route("/decouverte", methods=["GET", "POST"])
+    @exiger("admin")
+    def decouverte_page():
+        reseau_texte = request.form.get("reseau", "").strip()
+        resultats, erreur, statut_http = None, None, 200
+        if request.method == "POST":
+            try:
+                reseau = decouverte.valider_reseau(reseau_texte)
+                resultats = decouverte.scanner_reseau(reseau)
+            except decouverte.ReseauInvalide as e:
+                erreur, statut_http = str(e), 400
+            except decouverte.ScanEnCours as e:
+                erreur, statut_http = str(e), 429
+            else:
+                journaliser("scan réseau", f"{reseau} : {len(resultats)} machine(s)")
+                db.session.commit()
+                connus = {
+                    e.numero_serie
+                    for e in Equipement.query.filter(Equipement.numero_serie.like("IP-%"))
+                }
+                for machine in resultats:
+                    machine["connu"] = f"IP-{machine['ip']}" in connus
+        page = render_template(
+            "decouverte.html",
+            reseau=reseau_texte,
+            resultats=resultats,
+            erreur=erreur,
+            noms=decouverte.PORTS,
+        )
+        return page, statut_http
+
+    @app.post("/decouverte/ajouter")
+    @exiger("admin")
+    def decouverte_ajouter():
+        nom = request.form.get("nom", "").strip()[:100]
+        try:
+            reseau = decouverte.valider_reseau(request.form.get("ip", ""))
+        except decouverte.ReseauInvalide:
+            abort(400)
+        if reseau.num_addresses != 1:
+            abort(400)
+        ip = str(reseau.network_address)
+        db.session.add(
+            Equipement(
+                nom=nom or f"Machine {ip}",
+                type="Découvert",
+                numero_serie=f"IP-{ip}",
+                statut="en stock",
+            )
+        )
+        journaliser("ajout", f"{nom or ip} (IP-{ip}) depuis la découverte réseau")
+        try:
+            db.session.commit()
+        except IntegrityError:
+            db.session.rollback()
+            return redirect(url_for("index", msg="doublon"))
+        return redirect(url_for("index", msg="ajoute"))
+    
     # ---------- Journal d'audit ----------
     @app.get("/audit")
     @exiger("admin")
