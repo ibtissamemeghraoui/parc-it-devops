@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block titre %}{{ titre }} – Parc IT{% endblock %}
+{% block contenu %}
+<section class="carte formcarte" style="text-align:center">
+  <p class="code-erreur">{{ code }}</p>
+  <h1 style="margin-top:.5rem">{{ titre }}</h1>
+  <p class="doux" style="margin:.6rem 0 1.2rem">{{ texte }}</p>
+  <a class="btn" href="{{ url_for('index') }}">Retour à l'inventaire</a>
+</section>
+{% endblock %}

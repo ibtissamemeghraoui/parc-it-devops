@@ -4,13 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block titre %}Parc IT{% endblock %}</title>
+  <script>try{document.documentElement.dataset.theme=localStorage.getItem('theme')||(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light')}catch(e){}</script>
   <style>
-    :root{--ink:#17233b;--bg:#eef1f5;--carte:#fff;--trait:#d9e0e8;--doux:#5b6778;--accent:#0b6e6e;--accent-fonce:#095858;--stock:#22c55e;--affecte:#38bdf8;--panne:#ef4444}
+    :root{--ink:#17233b;--bg:#eef1f5;--carte:#fff;--trait:#d9e0e8;--doux:#5b6778;--accent:#0b6e6e;--accent-fonce:#095858;--stock:#22c55e;--affecte:#38bdf8;--panne:#ef4444;--lien:#0b6e6e}
     *{box-sizing:border-box}
     body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 "Segoe UI Variable","Segoe UI",system-ui,sans-serif}
     :focus-visible{outline:3px solid #f59e0b;outline-offset:2px}
-    .bandeau{display:flex;align-items:center;gap:1rem;flex-wrap:wrap;padding:.75rem clamp(1rem,4vw,2.5rem);background:var(--ink);color:#fff}
-    .marque{margin-right:auto;font-size:1.25rem;font-weight:650;color:#fff;text-decoration:none}
+    .bandeau{display:flex;align-items:center;gap:1rem;flex-wrap:wrap;padding:.75rem clamp(1rem,4vw,2.5rem);background:var(--bandeau,var(--ink));color:#fff}
+    .marque{display:flex;align-items:center;gap:.5rem;margin-right:auto;font-size:1.25rem;font-weight:650;color:#fff;text-decoration:none}
     .etat{display:flex;align-items:center;gap:.5rem;font-size:.875rem}
     .etat::before{content:"";width:.6rem;height:.6rem;border-radius:50%;background:var(--stock)}
     .etat.ko::before{background:var(--panne)}
@@ -75,21 +76,91 @@
     .actions{display:flex;gap:.4rem;white-space:nowrap}
     .actions form{margin:0}
     .vide{padding:2rem 1rem;color:var(--doux);text-align:center}
+    .doux a{color:var(--lien)}
+    .kpi{display:grid;gap:1rem;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-bottom:1.25rem}
+    .kpi div{padding:.8rem 1rem;border:1px solid var(--trait);border-radius:8px;background:var(--carte);box-shadow:inset 0 3px 0 var(--bande,var(--accent))}
+    .kpi .stock{--bande:var(--stock)}.kpi .affecte{--bande:var(--affecte)}.kpi .panne{--bande:var(--panne)}
+    .kpi span{display:block;color:var(--doux);font-size:.85rem}
+    .kpi b{font-size:1.6rem;font-weight:650}
+    .kpi small{margin-left:.4rem;color:var(--doux)}
+    .code-erreur{margin:0;color:var(--accent);font-size:3.5rem;font-weight:700;line-height:1}
+    .spin{display:inline-block;width:1em;height:1em;border:2px solid var(--trait);border-top-color:var(--accent);border-radius:50%;vertical-align:-.15em;animation:tourne .8s linear infinite}
+    @keyframes tourne{to{transform:rotate(360deg)}}
+    @media(prefers-reduced-motion:reduce){.spin{animation-duration:3s}}
+    th[data-o=a]::after{content:" ▲"}
+    th[data-o=d]::after{content:" ▼"}
+    table.triable th:not(.sans-tri){cursor:pointer}
+    @media(max-width:640px){
+      .cartes{overflow:visible;border:0;background:none}
+      .cartes table,.cartes thead,.cartes tbody,.cartes tr,.cartes td{display:block}
+      .cartes thead{position:absolute;left:-9999px}
+      .cartes tr{margin-bottom:.75rem;border:1px solid var(--trait);border-radius:8px;background:var(--carte);box-shadow:inset 4px 0 0 var(--bande,#cbd5e1)}
+      .cartes td{display:flex;justify-content:space-between;gap:1rem;padding:.55rem .9rem .55rem 1.1rem;border-bottom:1px solid var(--trait);box-shadow:none}
+      .cartes td::before{content:attr(data-label);color:var(--doux);font-size:.85rem}
+      .cartes tr:last-child td,.cartes td:last-child{border-bottom:0}
+    }
+    :root[data-theme=dark]{--ink:#e6ebf3;--bg:#0f1624;--carte:#18212f;--trait:#2a3547;--doux:#9aa8bd;--accent:#14857b;--accent-fonce:#0f6e66;--bandeau:#0a101b;--lien:#5eead4}
+    [data-theme=dark] input,[data-theme=dark] select{border-color:#3a4760;background:#0f1624}
+    [data-theme=dark] .btn.neutre{border-color:var(--trait);background:var(--carte);color:var(--ink)}
+    [data-theme=dark] .btn.neutre:hover{background:#222d3f}
+    [data-theme=dark] .btn.danger{border-color:#7f3b3b;background:var(--carte);color:#fca5a5}
+    [data-theme=dark] .btn.danger:hover{background:#3a1414}
+    [data-theme=dark] .filtres a{background:var(--carte)}
+    [data-theme=dark] .filtres a[aria-current]{border-color:var(--ink);background:var(--ink);color:var(--bg)}
+    [data-theme=dark] td{border-bottom-color:var(--trait)}
+    [data-theme=dark] .serie{border-color:#4a5873;background:#111a28}
+    [data-theme=dark] .barre{background:var(--trait)}
+    [data-theme=dark] .pilule.stock{background:#0f3d25;color:#86efac}
+    [data-theme=dark] .pilule.affecte{background:#0c3a52;color:#7dd3fc}
+    [data-theme=dark] .pilule.panne{background:#4a1717;color:#fca5a5}
+    [data-theme=dark] .avis.succes{border-color:#1f6b3f;background:#0f2f1f;color:#86efac}
+    [data-theme=dark] .avis.erreur{border-color:#7f2a2a;background:#3a1414;color:#fca5a5}
+    .onglets{display:flex;gap:.25rem;padding:0 clamp(1rem,4vw,2.5rem);border-bottom:1px solid var(--trait);background:var(--carte);overflow-x:auto}
+    .onglets a{padding:.75rem 1rem;border-bottom:3px solid transparent;color:var(--doux);text-decoration:none;white-space:nowrap}
+    .onglets a:hover{color:var(--ink)}
+    .onglets a[aria-current]{border-bottom-color:var(--accent);color:var(--ink);font-weight:600}
+    .deux,.pratiques{display:grid;gap:1.25rem;grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+    .pratiques{gap:1rem;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+    .histo{display:flex;align-items:flex-end;gap:.35rem;height:150px}
+    .histo div{display:flex;flex:1;flex-direction:column;justify-content:flex-end;align-items:center;gap:.3rem;height:100%;color:var(--doux);font-size:.7rem}
+    .histo i{display:block;width:100%;min-height:2px;border-radius:3px 3px 0 0;background:var(--accent)}
+    ol.etapes{display:flex;flex-wrap:wrap;gap:.5rem;margin:0;padding:0;list-style:none}
+    ol.etapes li{padding:.45rem .8rem;border:1px solid var(--trait);border-radius:6px;background:var(--bg)}
+    ol.etapes li:not(:last-child)::after{content:"→";margin-left:.6rem;color:var(--doux)}
+    .tag{display:inline-block;margin:.5rem .3rem 0 0;padding:.05rem .6rem;border:1px solid var(--trait);border-radius:99px;color:var(--doux);font-size:.8rem}
   </style>
 </head>
 <body>
   <header class="bandeau">
-    <a class="marque" href="{{ url_for('index') }}">Parc IT</a>
+    <a class="marque" href="{{ url_for('index') }}"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="4" width="18" height="6" rx="1.5"/><rect x="3" y="14" width="18" height="6" rx="1.5"/><circle cx="7" cy="7" r=".8" fill="currentColor"/><circle cx="7" cy="17" r=".8" fill="currentColor"/></svg>Parc IT</a>
     <span class="etat {{ 'ok' if base_ok else 'ko' }}">{{ 'Système opérationnel' if base_ok else 'Base de données indisponible' }}</span>
+    <button class="lien" id="theme" type="button" aria-label="Changer de thème">Thème</button>
     {% if utilisateur %}
     <div class="compte">
-    {% if utilisateur.role == 'admin' %}<a class="lien" href="{{ url_for('decouverte_page') }}">Découverte réseau</a><a class="lien" href="{{ url_for('audit') }}">Journal d'audit</a>{% endif %}{% if utilisateur.role == 'admin' %}<a class="lien" href="{{ url_for('decouverte_page') }}">Découverte réseau</a><a class="lien" href="{{ url_for('audit') }}">Journal d'audit</a>{% endif %}
       <span>{{ utilisateur.nom_utilisateur }}</span>
       <span class="role">{{ utilisateur.role }}</span>
       <form method="post" action="{{ url_for('logout') }}"><button class="lien" type="submit">Se déconnecter</button></form>
     </div>
     {% endif %}
   </header>
+  {% if utilisateur %}
+  <nav class="onglets" aria-label="Navigation">
+    {% set pages = [('index', 'Inventaire'), ('tableau_de_bord', 'Tableau de bord'), ('devops_page', 'DevOps')] %}
+    {% if utilisateur.role == 'admin' %}{% set pages = pages + [('decouverte_page', 'Découverte réseau'), ('audit', "Journal d'audit")] %}{% endif %}
+    {% for ep, nom in pages %}<a href="{{ url_for(ep) }}" {% if request.endpoint == ep %}aria-current="page"{% endif %}>{{ nom }}</a>{% endfor %}
+  </nav>
+  {% endif %}
   <main class="page">{% block contenu %}{% endblock %}</main>
+<script>
+  document.getElementById('theme').onclick=function(){var t=document.documentElement.dataset.theme==='dark'?'light':'dark';document.documentElement.dataset.theme=t;try{localStorage.setItem('theme',t)}catch(e){}};
+  document.querySelectorAll('table.triable th').forEach(function(th,i){
+    if(th.classList.contains('sans-tri'))return;
+    th.tabIndex=0;
+    function trier(){var tb=th.closest('table').tBodies[0],asc=th.dataset.o!=='a';
+      th.parentNode.querySelectorAll('th').forEach(function(h){delete h.dataset.o});th.dataset.o=asc?'a':'d';
+      Array.from(tb.rows).sort(function(a,b){return a.cells[i].innerText.localeCompare(b.cells[i].innerText,'fr',{numeric:true})*(asc?1:-1)}).forEach(function(r){tb.appendChild(r)})}
+    th.onclick=trier;th.onkeydown=function(e){if(e.key==='Enter')trier()};
+  });
+</script>
 </body>
 </html>

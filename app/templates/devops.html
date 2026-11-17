@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block titre %}DevOps – Parc IT{% endblock %}
+{% block contenu %}
+<h1>DevOps : vue d'ensemble</h1>
+<p class="doux" style="margin:.4rem 0 1rem">L'état réel de l'application en cours d'exécution, son architecture et le pipeline qui la livre.</p>
+
+<section class="kpi" aria-label="État en direct">
+  <div class="stock"><span>Application</span><b>{{ 'En ligne' if base_ok else 'Dégradée' }}</b><small>v{{ infos.version }} · {{ infos.duree }}</small></div>
+  <div class="{{ 'stock' if base_ok else 'panne' }}"><span>Base de données</span><b>{{ infos.base }}</b><small>{{ infos.base_version or '' }} · {{ latence }} ms</small></div>
+  <div class="{{ 'stock' if metriques else 'affecte' }}"><span>Supervision</span>
+    {% if metriques %}<b>{{ metriques.debit }} req/s</b><small>{{ metriques.cibles }} cible(s) · {{ metriques.erreurs }} erreur(s) 5xx/s</small>
+    {% else %}<b>Hors ligne</b><small>Prometheus injoignable (hors Docker Compose)</small>{% endif %}</div>
+  <div><span>Conteneur</span><b style="font-size:1.1rem">{{ infos.machine }}</b><small>Python {{ infos.python }}</small></div>
+</section>
+
+<section class="carte" style="margin-bottom:1.25rem">
+  <h2>Architecture</h2>
+  <svg viewBox="0 0 690 210" role="img" aria-label="Utilisateur, Nginx, application Flask, PostgreSQL, Prometheus et Grafana" style="width:100%;height:auto;color:var(--ink)">
+    <defs><marker id="fl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="currentColor"/></marker></defs>
+    <g fill="var(--carte)" stroke="var(--trait)" stroke-width="1.5">
+      <rect x="5" y="30" width="130" height="50" rx="8"/><rect x="185" y="30" width="130" height="50" rx="8"/>
+      <rect x="365" y="30" width="130" height="50" rx="8"/><rect x="545" y="30" width="130" height="50" rx="8"/>
+      <rect x="365" y="140" width="130" height="50" rx="8"/><rect x="545" y="140" width="130" height="50" rx="8"/>
+    </g>
+    <g fill="currentColor" font-size="14" text-anchor="middle">
+      <text x="70" y="60">Utilisateur</text><text x="250" y="60">Nginx</text><text x="430" y="60">Flask + gunicorn</text><text x="610" y="60">PostgreSQL</text>
+      <text x="430" y="170">Prometheus</text><text x="610" y="170">Grafana</text>
+    </g>
+    <g stroke="currentColor" stroke-width="1.5" marker-end="url(#fl)">
+      <line x1="135" y1="55" x2="183" y2="55"/><line x1="315" y1="55" x2="363" y2="55"/><line x1="495" y1="55" x2="543" y2="55"/>
+      <line x1="430" y1="140" x2="430" y2="82"/><line x1="545" y1="165" x2="497" y2="165"/>
+    </g>
+  </svg>
+</section>
+
+<section class="carte" style="margin-bottom:1.25rem">
+  <h2>Pipeline CI/CD (GitHub Actions)</h2>
+  <ol class="etapes">
+    <li>Tests pytest</li><li>Construction de l'image</li><li>Test de fumée</li><li>Scan Trivy</li><li>Validation Terraform</li><li>Release</li>
+  </ol>
+  <p class="doux" style="margin:.9rem 0 .5rem">Une pull request ne peut être fusionnée que si ces vérifications sont vertes. Dependabot propose les mises à jour des dépendances.</p>
+  <p style="margin:0"><img src="https://github.com/ibtissamemeghraoui/parc-it-devops/actions/workflows/ci.yml/badge.svg?branch=dev" alt="Statut de la CI" height="20">
+    <a class="btn neutre petit" href="https://github.com/ibtissamemeghraoui/parc-it-devops/actions" rel="noopener">Voir les exécutions</a>
+    <a class="btn neutre petit" href="https://github.com/ibtissamemeghraoui/parc-it-devops/releases" rel="noopener">Versions publiées</a></p>
+</section>
+
+<div class="pratiques">
+  <section class="carte"><h2>Livraison continue</h2><p class="doux" style="margin:0">Chaque changement passe par une branche, une pull request et une CI verte avant d'atteindre dev, puis main avec une version taguée.</p><span class="tag">GitHub Actions</span><span class="tag">pytest</span><span class="tag">Releases</span></section>
+  <section class="carte"><h2>Conteneurs</h2><p class="doux" style="margin:0">Image sans privilèges, dépendances figées, pile complète lancée par une seule commande.</p><span class="tag">Docker</span><span class="tag">Compose</span><span class="tag">Nginx</span></section>
+  <section class="carte"><h2>Infrastructure as Code</h2><p class="doux" style="margin:0">Réseau, volume, base, application et Nginx décrits en Terraform, validés à chaque pull request.</p><span class="tag">Terraform</span></section>
+  <section class="carte"><h2>Supervision</h2><p class="doux" style="margin:0">Métriques exposées, alertes sur la disponibilité et les erreurs, tableau de bord Grafana versionné.</p><span class="tag">Prometheus</span><span class="tag">Grafana</span></section>
+  <section class="carte"><h2>Sécurité (DevSecOps)</h2><p class="doux" style="margin:0">Scan de l'image à chaque build, rôles, mots de passe hachés, limitation des essais de connexion, journal d'audit.</p><span class="tag">Trivy</span><span class="tag">Dependabot</span></section>
+  <section class="carte"><h2>Fiabilité</h2><p class="doux" style="margin:0">Sauvegarde et restauration de la base, avec un test qui prouve qu'une sauvegarde se restaure.</p><span class="tag">pg_dump</span><span class="tag">Scripts</span></section>
+</div>
+{% endblock %}
