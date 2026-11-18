@@ -7,9 +7,10 @@
 <form class="carte" method="post" action="{{ url_for('decouverte_page') }}">
   <div class="recherche">
     <input name="reseau" value="{{ reseau }}" placeholder="192.168.1.0/24" required aria-label="Réseau à scanner">
-    <button class="btn" type="submit">Lancer le scan</button>
+    <button class="btn" id="lancer" type="submit">Lancer le scan</button>
   </div>
   <p class="doux" style="margin:.75rem 0 0;font-size:.9rem">Réseaux privés uniquement, 256 adresses au maximum. Le scan peut durer jusqu'à une minute.</p>
+<p id="attente" hidden role="status" class="doux" style="margin:.75rem 0 0"><span class="spin"></span> Scan en cours, cela peut durer jusqu'à une minute…</p>
 </form>
 
 {% if erreur %}<p class="avis erreur" role="alert" style="margin-top:1rem">{{ erreur }}</p>{% endif %}
@@ -51,4 +52,12 @@
 {% endif %}
 {% endif %}
 <p style="margin-top:1rem"><a class="btn neutre" href="{{ url_for('index') }}">Retour à l'inventaire</a></p>
+<script>
+  document.querySelector('form.carte').addEventListener('submit', function () {
+    var b = document.getElementById('lancer');
+    b.disabled = true;
+    b.textContent = 'Scan en cours…';
+    document.getElementById('attente').hidden = false;
+  });
+</script>
 {% endblock %}

@@ -3,6 +3,7 @@ import io
 import math
 import os
 import re
+import time
 from datetime import datetime, timedelta, timezone
 from functools import wraps
 
@@ -26,6 +27,8 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.security import check_password_hash, generate_password_hash
 
 import decouverte
+import devops
+
 db = SQLAlchemy()
 
 STATUTS = ("en stock", "affecté", "en panne")
@@ -536,7 +539,7 @@ def create_app(config=None):
         db.session.commit()
         return "", 204
 
-        # ---------- Découverte du réseau ----------
+    # ---------- Découverte du réseau ----------
     @app.route("/decouverte", methods=["GET", "POST"])
     @exiger("admin")
     def decouverte_page():
@@ -594,7 +597,68 @@ def create_app(config=None):
             db.session.rollback()
             return redirect(url_for("index", msg="doublon"))
         return redirect(url_for("index", msg="ajoute"))
-    
+
+    # ---------- Tableau de bord et page DevOps ----------
+    @app.get("/tableau-de-bord")
+    @exiger()
+    def tableau_de_bord():
+        debut = (maintenant() - timedelta(days=13)).replace(hour=0, minute=0, second=0, microsecond=0)
+        par_jour = {(debut + timedelta(days=i)).date(): 0 for i in range(14)}
+        par_action = {}
+        for entree in Audit.query.filter(Audit.date >= debut).all():
+            par_jour[entree.date.date()] = par_jour.get(entree.date.date(), 0) + 1
+            par_action[entree.action] = par_action.get(entree.action, 0) + 1
+        maximum = max(par_jour.values()) or 1
+        jours = [(j.strftime("%d/%m"), n, round(n * 100 / maximum)) for j, n in par_jour.items()]
+        classes_actions = sorted(par_action.items(), key=lambda x: -x[1])[:6]
+        plus_haut = classes_actions[0][1] if classes_actions else 1
+        actions = [(a, n, round(n * 100 / plus_haut)) for a, n in classes_actions]
+        total = Equipement.query.count()
+        pannes = Equipement.query.filter_by(statut="en panne").count()
+        admin = utilisateur_courant().role == "admin"
+        return render_template(
+            "tableau_de_bord.html",
+            jours=jours,
+            actions=actions,
+            total=total,
+            pannes=pannes,
+            taux=round(pannes * 100 / total) if total else 0,
+            comptes=Utilisateur.query.count(),
+            actions_24h=Audit.query.filter(Audit.date >= maintenant() - timedelta(hours=24)).count(),
+            recentes=Audit.query.order_by(Audit.id.desc()).limit(8).all() if admin else None,
+        )
+
+    @app.get("/devops")
+    @exiger()
+    def devops_page():
+        debut = time.perf_counter()
+        base_ok = base_est_ok()
+        latence = round((time.perf_counter() - debut) * 1000)
+        return render_template(
+            "devops.html",
+            infos=devops.informations(db),
+            metriques=devops.metriques(),
+            latence=latence,
+        )
+
+    # ---------- Pages d'erreur ----------
+    erreurs = {
+        400: ("Requête invalide", "La demande n'a pas pu être comprise."),
+        403: ("Accès refusé", "Ton compte n'a pas les droits nécessaires pour cette page."),
+        404: ("Page introuvable", "Cette page n'existe pas ou a été déplacée."),
+        405: ("Action non autorisée", "Cette page n'accepte pas cette action."),
+    }
+
+    def page_erreur(e):
+        titre, texte = erreurs[e.code]
+        if request.path.startswith("/api/"):
+            return jsonify(erreur=titre), e.code
+        page = render_template("erreur.html", code=e.code, titre=titre, texte=texte)
+        return page, e.code
+
+    for code in erreurs:
+        app.register_error_handler(code, page_erreur)
+
     # ---------- Journal d'audit ----------
     @app.get("/audit")
     @exiger("admin")

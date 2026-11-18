@@ -4,7 +4,9 @@ from datetime import timedelta
 import pytest
 
 import decouverte
+import devops
 from app import Audit, Equipement, Tentative, Utilisateur, create_app, db, maintenant
+
 
 def creer_utilisateur(nom, mot_de_passe, role):
     utilisateur = Utilisateur(nom_utilisateur=nom, role=role)
@@ -377,7 +379,8 @@ def test_verrouillage_journalise_une_seule_fois(anonyme):
     assert Audit.query.filter_by(action="verrouillage").count() == 1
     assert Tentative.query.count() == 5
 
-    # ---------- Découverte du réseau ----------
+
+# ---------- Découverte du réseau ----------
 
 MACHINE = {"ip": "192.168.1.10", "nom": "pc-bureau", "ports": [22, 80]}
 
@@ -476,3 +479,66 @@ def test_scan_signale_les_machines_deja_connues(client, monkeypatch):
     monkeypatch.setattr(decouverte, "scanner_reseau", lambda reseau: [dict(MACHINE)])
     texte = client.post("/decouverte", data={"reseau": "192.168.1.0/24"}).get_data(as_text=True)
     assert "Déjà dans l'inventaire" in texte
+
+
+# ---------- Interface ----------
+
+
+def test_pages_d_erreur_personnalisees(anonyme, lecteur):
+    r = anonyme.get("/page-qui-n-existe-pas")
+    assert r.status_code == 404
+    assert "Page introuvable" in r.get_data(as_text=True)
+    r = lecteur.get("/audit")
+    assert r.status_code == 403
+    assert "Accès refusé" in r.get_data(as_text=True)
+
+
+def test_erreur_api_reste_en_json(client):
+    r = client.get("/api/equipements/999")
+    assert r.status_code == 404
+    assert r.get_json()["erreur"] == "Page introuvable"
+
+
+def test_page_contient_theme_indicateurs_et_tri(client):
+    texte = client.get("/").get_data(as_text=True)
+    assert 'id="theme"' in texte
+    assert "Indicateurs" in texte
+    assert "triable" in texte
+
+
+# ---------- Tableau de bord et page DevOps ----------
+
+
+def test_navigation_par_onglets(client, lecteur):
+    texte = client.get("/").get_data(as_text=True)
+    assert "Tableau de bord" in texte and "DevOps" in texte and 'href="/audit"' in texte
+    assert 'href="/audit"' not in lecteur.get("/").get_data(as_text=True)
+
+
+def test_tableau_de_bord(client, lecteur):
+    client.post("/api/equipements", json=NOUVEAU)
+    texte = client.get("/tableau-de-bord").get_data(as_text=True)
+    assert "Activité des 14 derniers jours" in texte
+    assert "Dernières actions" in texte
+    assert "Dernières actions" not in lecteur.get("/tableau-de-bord").get_data(as_text=True)
+
+
+def test_page_devops_sans_prometheus(client, monkeypatch):
+    monkeypatch.setattr(devops, "metriques", lambda: None)
+    texte = client.get("/devops").get_data(as_text=True)
+    assert "Pipeline CI/CD" in texte
+    assert "Prometheus injoignable" in texte
+
+
+def test_page_devops_avec_metriques(lecteur, monkeypatch):
+    monkeypatch.setattr(devops, "metriques", lambda: {"cibles": 2, "debit": 1.5, "erreurs": 0.0})
+    assert "1.5 req/s" in lecteur.get("/devops").get_data(as_text=True)
+
+
+def test_pages_protegees_pour_anonymes(anonyme):
+    assert anonyme.get("/devops").status_code == 302
+    assert anonyme.get("/tableau-de-bord").status_code == 302
+
+
+def test_metriques_renvoie_none_si_prometheus_absent():
+    assert devops.metriques("http://127.0.0.1:9") is None
