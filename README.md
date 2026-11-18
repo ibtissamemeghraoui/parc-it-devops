@@ -58,6 +58,9 @@ pytest -v
 | `/login`, `/logout` | GET, POST / POST | public | Connexion, déconnexion |
 | `/inscription` | GET, POST | public | Création d'un compte lecteur |
 | `/ajouter`, `/modifier/<id>`, `/supprimer/<id>` | POST (GET pour modifier) | admin | Gestion depuis l'interface |
+| `/tableau-de-bord` | GET | connecté | Indicateurs et activité des 14 derniers jours |
+| `/devops` | GET | connecté | État en direct, architecture et pipeline CI/CD |
+| `/decouverte`, `/decouverte/ajouter` | GET, POST | admin | Découverte du réseau, ajout à l'inventaire |
 | `/audit` | GET | admin | Journal d'audit |
 | `/health`, `/ready` | GET | public | Santé du service, état de la base |
 | `/metrics` | GET | Prometheus | Métriques (fermée à l'extérieur par Nginx) |
@@ -78,6 +81,26 @@ flowchart LR
 Seul Nginx est accessible depuis l'extérieur. La base de données n'est jamais exposée,
 et la page des métriques est fermée à l'extérieur : seul Prometheus, à l'intérieur du
 réseau Docker, peut la lire.
+
+## Interface
+
+- Navigation par onglets : Inventaire, Tableau de bord, DevOps, et pour les administrateurs
+  Découverte réseau et Journal d'audit.
+- Mode clair et sombre (bouton « Thème », il suit aussi le réglage du système).
+- Inventaire avec indicateurs, recherche, filtres par statut, tri des colonnes et export CSV ;
+  sur téléphone, chaque équipement s'affiche comme une carte.
+- Tableau de bord : taux de pannes, nombre de comptes, histogramme de l'activité sur 14 jours,
+  actions les plus fréquentes et dernières actions (administrateurs).
+- Pages d'erreur personnalisées (403, 404…), indicateur de chargement pendant un scan réseau.
+
+### Page DevOps
+
+La page `/devops` montre le fonctionnement réel de l'application : version et durée de
+fonctionnement, état et latence de la base PostgreSQL, nom du conteneur, et métriques lues
+directement dans Prometheus (requêtes par seconde, erreurs 5xx). Elle présente aussi
+l'architecture, les étapes du pipeline CI/CD et les pratiques mises en œuvre (livraison
+continue, conteneurs, infrastructure as code, supervision, sécurité, sauvegardes). Sans
+Prometheus (par exemple avec Terraform seul), la supervision s'affiche « hors ligne ».
 
 ## Authentification et rôles
 
@@ -116,6 +139,22 @@ déconnexion, connexion échouée, inscription, ajout, modification (avec les va
 et après), suppression et changement de rôle. Un ajout refusé (doublon) n'est pas
 journalisé, puisqu'il n'a pas eu lieu. Les administrateurs consultent les 200 dernières
 entrées sur la page `/audit`.
+
+## Découverte du réseau
+
+La page `/decouverte` (administrateurs) cherche les machines allumées d'un réseau local, par
+exemple `192.168.1.0/24`. Pour chaque adresse, l'application tente une connexion TCP sur
+quelques ports courants (SSH, HTTP, HTTPS, SMB, RDP…) : un port ouvert, ou un refus de
+connexion, prouve qu'une machine répond. Le nom est cherché par DNS inverse, et un bouton
+ajoute la machine à l'inventaire (type « Découvert », numéro de série `IP-<adresse>`).
+
+Garde-fous : réseaux IPv4 privés uniquement, 256 adresses au maximum, un seul scan à la
+fois, réservé au rôle `admin`, et chaque scan est écrit dans le journal d'audit. À utiliser
+uniquement sur un réseau que l'on administre ou que l'on est autorisé à tester.
+
+Limites : une machine dont le pare-feu ignore toutes les connexions n'est pas détectée, et
+depuis un conteneur Docker les adresses MAC ne sont pas visibles (les machines sont
+identifiées par leur adresse IP).
 
 ## Infrastructure as Code (Terraform)
 
@@ -187,5 +226,5 @@ le débit de requêtes, le temps de réponse moyen et les erreurs serveur.
 - [x] Inscription et journal d'audit
 - [x] Limitation des tentatives de connexion
 - [x] Sauvegarde et restauration de PostgreSQL
-- [ ] Découverte automatique du réseau
+- [x] Découverte automatique du réseau
 - [x] Infrastructure as Code (Terraform)
